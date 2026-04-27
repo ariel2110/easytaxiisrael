@@ -46,6 +46,7 @@ import models.growth      # noqa: F401
 import models.legal       # noqa: F401
 import models.location    # noqa: F401
 import models.payment     # noqa: F401
+import models.persona     # noqa: F401
 import models.rating      # noqa: F401
 import models.ride        # noqa: F401
 
@@ -156,4 +157,11 @@ async def passenger_headers(fake_redis, passenger):
 async def admin_headers(fake_redis, admin):
     with patch("core.security.redis_client", fake_redis):
         token = create_access_token(str(admin.id), admin.role.value)
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture
+async def driver_headers(fake_redis, driver):
+    with patch("core.security.redis_client", fake_redis):
+        token = create_access_token(str(driver.id), driver.role.value)
     return {"Authorization": f"Bearer {token}"}

@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     EVOLUTION_API_KEY: str = "evolution_secret"
     EVOLUTION_INSTANCE: str = "easytaxi"
 
+    # Persona KYC (https://withpersona.com)
+    PERSONA_API_KEY: str = ""
+    PERSONA_WEBHOOK_SECRET: str = ""
+    PERSONA_TEMPLATE_ID: str = ""          # inquiry template ID from Persona dashboard
+    PERSONA_API_VERSION: str = "2025-12-08"
+
     # ── Multi-Agent System — LLM API keys (all optional; agents fall back gracefully) ──
     # Onboarding + Support agents (GPT-4o Vision / GPT-4o mini)
     OPENAI_API_KEY: str | None = None
