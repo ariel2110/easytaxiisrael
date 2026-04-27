@@ -12,7 +12,6 @@ interface AuthState {
 interface WaSession {
   session_id: string
   whatsapp_link: string
-  kyc_url?: string
 }
 
 export function useAuth() {
@@ -44,12 +43,10 @@ export function useAuth() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
   }, [])
 
-  /** Request a WA auth session and start polling */
   const requestWaAuth = useCallback(async (phone: string) => {
     setState((s) => ({ ...s, error: null }))
     const res: WaAuthLinkResponse = await api.auth.requestWaAuth(phone, 'driver')
     setWaSession({ session_id: res.session_id, whatsapp_link: res.whatsapp_link })
-
     _stopPolling()
     pollRef.current = setInterval(async () => {
       try {
@@ -59,14 +56,14 @@ export function useAuth() {
           localStorage.setItem('access_token', poll.access_token)
           localStorage.setItem('refresh_token', poll.refresh_token)
           const user = await api.auth.me()
-          setWaSession(prev => prev ? { ...prev, kyc_url: poll.kyc_url } : null)
           setState({ user, loading: false, error: null })
+          setWaSession(null)
         } else if (poll.status === 'expired') {
           _stopPolling()
           setWaSession(null)
           setState((s) => ({ ...s, error: 'פג תוקף הקישור. אנא נסה שוב.' }))
         }
-      } catch { /* keep polling on network error */ }
+      } catch { /* keep polling on network hiccup */ }
     }, 2000)
   }, [_stopPolling])
 

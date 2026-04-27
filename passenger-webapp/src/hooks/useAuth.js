@@ -26,12 +26,10 @@ export function useAuth() {
             pollRef.current = null;
         }
     }, []);
-    /** Request a WA auth session and start polling for token */
     const requestWaAuth = useCallback(async (phone) => {
         setError(null);
         const res = await api.auth.requestWaAuth(phone, 'passenger');
         setWaSession({ session_id: res.session_id, whatsapp_link: res.whatsapp_link });
-        // Start polling every 2s
         _stopPolling();
         pollRef.current = setInterval(async () => {
             try {
@@ -50,7 +48,7 @@ export function useAuth() {
                     setError('פג תוקף הקישור. אנא נסה שוב.');
                 }
             }
-            catch { /* network hiccup — keep polling */ }
+            catch { /* keep polling on network hiccup */ }
         }, 2000);
     }, [_stopPolling]);
     const cancelWaAuth = useCallback(() => {
