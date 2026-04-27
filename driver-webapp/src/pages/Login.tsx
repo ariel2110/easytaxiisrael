@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 
+type Step = 'home' | 'auth'
+
 export default function Login() {
   const { requestWaAuth, cancelWaAuth, waSession, error } = useAuth()
+  const [step, setStep] = useState<Step>('home')
   const [phone, setPhone] = useState('')
   const [busy, setBusy] = useState(false)
   const [localErr, setLocalErr] = useState<string | null>(null)
@@ -20,20 +23,65 @@ export default function Login() {
     }
   }
 
+  function handleBack() {
+    cancelWaAuth()
+    setLocalErr(null)
+    setPhone('')
+    setStep('home')
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     STEP: home — choose role
+  ──────────────────────────────────────────────────────────── */
+  if (step === 'home') {
+    return (
+      <div className="page" style={{ justifyContent: 'center', alignItems: 'center', padding: '2rem' }}>
+        <div className="card slide-in" style={{ width: '100%', maxWidth: 400 }}>
+          {/* Logo */}
+          <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
+            <div style={{ fontSize: '3rem' }}>🚕</div>
+            <h1 style={{ fontSize: '1.75rem', fontWeight: 800, marginTop: '.5rem', letterSpacing: '-.5px' }}>EasyTaxi</h1>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '.35rem', fontSize: '.95rem' }}>ברוך הבא — בחר כיצד תרצה להתחבר</p>
+          </div>
+
+          {/* Role buttons */}
+          <button
+            className="btn btn-primary"
+            style={{ width: '100%', padding: '1rem', fontSize: '1.1rem', fontWeight: 600, marginBottom: '.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '.6rem' }}
+            onClick={() => setStep('auth')}
+          >
+            <span style={{ fontSize: '1.4rem' }}>🚗</span> אני נהג
+          </button>
+
+          <a
+            href="https://easytaxiisrael.com"
+            className="btn"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '.6rem', width: '100%', padding: '1rem', fontSize: '1.1rem', fontWeight: 600, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', textDecoration: 'none', color: 'var(--text-primary)', boxSizing: 'border-box' }}
+          >
+            <span style={{ fontSize: '1.4rem' }}>🙋</span> אני נוסע
+          </a>
+        </div>
+      </div>
+    )
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     STEP: auth — WhatsApp link flow
+  ──────────────────────────────────────────────────────────── */
   return (
     <div className="page" style={{ justifyContent: 'center', alignItems: 'center', padding: '2rem' }}>
       <div className="card slide-in" style={{ width: '100%', maxWidth: 380 }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <div style={{ fontSize: '2rem' }}>🚗</div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginTop: '0.5rem' }}>EasyTaxi Driver</h1>
-          <p style={{ color: 'var(--text-secondary)', marginTop: '0.25rem' }}>כניסה מהירה דרך וואטסאפ</p>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginTop: '0.5rem' }}>כניסה לנהג</h1>
+          <p style={{ color: 'var(--text-secondary)', marginTop: '0.25rem' }}>אימות מהיר דרך וואטסאפ</p>
         </div>
 
         {!waSession ? (
-          /* ── Step 1: enter phone ── */
+          /* Phone input */
           <>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-              מספר טלפון (וואטסאפ)
+              מספר טלפון
             </label>
             <input
               className="input"
@@ -43,6 +91,7 @@ export default function Login() {
               onChange={(e) => setPhone(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleRequest()}
               dir="ltr"
+              autoFocus
             />
             <button
               className="btn btn-primary"
@@ -50,20 +99,23 @@ export default function Login() {
               disabled={busy}
               onClick={handleRequest}
             >
-              {busy ? 'שולח…' : <><span style={{ fontSize: '1.1rem' }}>💬</span> כניסה דרך וואטסאפ</>}
+              {busy ? 'שולח…' : <><span>💬</span> קבל קישור לוואטסאפ</>}
             </button>
-            <p style={{ marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center', lineHeight: 1.6 }}>
-              תקבל קישור שיפתח את וואטסאפ עם הודעה מוכנה — פשוט שלח אותה לאימות
-            </p>
+            <button
+              style={{ width: '100%', marginTop: '0.75rem', color: 'var(--text-secondary)', fontSize: '0.875rem', padding: '0.5rem' }}
+              onClick={handleBack}
+            >
+              ← חזור
+            </button>
           </>
         ) : (
-          /* ── Step 2: open WhatsApp + poll ── */
+          /* WhatsApp link + polling */
           <>
             <div style={{ textAlign: 'center', padding: '1rem 0' }}>
               <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>💬</div>
               <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>פתח את וואטסאפ ושלח את ההודעה</p>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.25rem' }}>
-                לחץ על הכפתור — ההודעה כבר מוכנה לשליחה. לאחר השליחה תיכנס אוטומטית.
+                ההודעה כבר מוכנה לשליחה — לאחר השליחה תיכנס אוטומטית.
               </p>
               <a
                 href={waSession.whatsapp_link}
@@ -82,8 +134,6 @@ export default function Login() {
                 <span>📲</span> פתח וואטסאפ לאימות
               </a>
             </div>
-
-            {/* Polling indicator */}
             <div style={{
               display: 'flex',
               alignItems: 'center',
@@ -93,29 +143,20 @@ export default function Login() {
               color: 'var(--text-secondary)',
               fontSize: '0.85rem',
             }}>
-              <span
-                style={{
-                  width: 14,
-                  height: 14,
-                  border: '2px solid currentColor',
-                  borderTopColor: 'transparent',
-                  borderRadius: '50%',
-                  display: 'inline-block',
-                  animation: 'spin 1s linear infinite',
-                }}
-              />
+              <span style={{
+                width: 14,
+                height: 14,
+                border: '2px solid currentColor',
+                borderTopColor: 'transparent',
+                borderRadius: '50%',
+                display: 'inline-block',
+                animation: 'spin 1s linear infinite',
+              }} />
               ממתין לאישור…
             </div>
-
             <button
-              style={{
-                width: '100%',
-                marginTop: '1rem',
-                color: 'var(--text-secondary)',
-                fontSize: '0.875rem',
-                padding: '0.5rem',
-              }}
-              onClick={cancelWaAuth}
+              style={{ width: '100%', marginTop: '1rem', color: 'var(--text-secondary)', fontSize: '0.875rem', padding: '0.5rem' }}
+              onClick={handleBack}
             >
               ← חזור
             </button>
@@ -123,18 +164,15 @@ export default function Login() {
         )}
 
         {(localErr ?? error) && (
-          <div
-            className="fade-in"
-            style={{
-              marginTop: '1rem',
-              padding: '0.75rem',
-              background: 'rgba(239,68,68,.1)',
-              border: '1px solid rgba(239,68,68,.3)',
-              borderRadius: 'var(--radius-sm)',
-              color: 'var(--danger)',
-              fontSize: '0.875rem',
-            }}
-          >
+          <div className="fade-in" style={{
+            marginTop: '1rem',
+            padding: '0.75rem',
+            background: 'rgba(239,68,68,.1)',
+            border: '1px solid rgba(239,68,68,.3)',
+            borderRadius: 'var(--radius-sm)',
+            color: 'var(--danger)',
+            fontSize: '0.875rem',
+          }}>
             {localErr ?? error}
           </div>
         )}
