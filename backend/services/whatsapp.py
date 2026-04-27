@@ -15,6 +15,7 @@ import re
 import httpx
 
 from core.config import settings
+from core.security import normalize_phone
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +26,8 @@ _HDRS = {"apikey": _KEY, "Content-Type": "application/json"}
 
 
 def _normalize(phone: str) -> str:
-    """Strip non-digit characters; ensure 972 prefix for Israeli numbers."""
-    digits = re.sub(r"\D", "", phone)
-    if digits.startswith("0"):
-        digits = "972" + digits[1:]
-    return digits
+    """Normalize phone for Evolution API (digits only, 972… prefix)."""
+    return normalize_phone(phone)
 
 
 async def _post(path: str, payload: dict) -> dict | None:

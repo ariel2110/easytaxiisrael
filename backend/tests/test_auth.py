@@ -60,7 +60,8 @@ class TestRequestOtp:
             await client.post("/auth/otp/request", json={"phone": "+972501112233"})
 
         assert len(captured) == 1
-        assert captured[0][0] == "+972501112233"
+        # normalize_phone strips the + prefix: "+972501112233" → "972501112233"
+        assert captured[0][0] == "972501112233"
 
 
 # ---------------------------------------------------------------------------
@@ -318,3 +319,133 @@ class TestUpdateDeviceToken:
             json={"device_token": "some-token"},
         )
         assert resp.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/wa/request  +  GET /auth/wa/poll/{session_id}
+# ---------------------------------------------------------------------------
+
+class TestWaAuth:
+    """WhatsApp deep-link authentication flow."""
+
+    async def test_request_returns_session_and_link(self, client):
+        resp = await client.post(
+            "/auth/wa/request",
+            json={"phone": "0546363350", "role": "passenger"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "session_id" in data
+        assert "whatsapp_link" in data
+        assert "wa.me" in data["whatsapp_link"]
+        assert data["expires_in_seconds"] == 300
+
+    async def test_request_accepts_all_israeli_phone_formats(self, client):
+        for phone in ["+972501234567", "972501234567", "0501234567"]:
+            resp = await client.post(
+                "/auth/wa/request",
+                json={"phone": phone, "role": "passenger"},
+            )
+            assert resp.status_code == 200, f"Phone {phone!r} was rejected"
+
+    async def test_request_invalid_phone_rejected(self, client):
+        resp = await client.post(
+            "/auth/wa/request",
+            json={"phone": "abc", "role": "passenger"},
+        )
+        assert resp.status_code == 422
+
+    async def test_poll_returns_pending_for_new_session(self, client):
+        # Create a session
+        req = await client.post(
+            "/auth/wa/request",
+            json={"phone": "0546000001", "role": "passenger"},
+        )
+        session_id = req.json()["session_id"]
+
+        # Poll immediately — should be pending
+        resp = await client.get(f"/auth/wa/poll/{session_id}")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "pending"
+
+    async def test_poll_returns_expired_for_unknown_session(self, client):
+        resp = await client.get("/auth/wa/poll/totally-unknown-session-id-xyz")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "expired"
+
+    async def test_full_wa_auth_flow(self, client, db):
+        """
+        Simulate the complete WA auth flow:
+        1. Request session
+        2. Simulate webhook completing the session (via complete_wa_auth_session)
+        3. Poll returns completed with tokens
+        """
+        from core.security import complete_wa_auth_session
+        from models.user import User, UserRole
+        import uuid
+
+        phone = "0546100100"
+        req = await client.post(
+            "/auth/wa/request",
+            json={"phone": phone, "role": "passenger"},
+        )
+        assert req.status_code == 200
+        data = req.json()
+        session_id = data["session_id"]
+        # Extract token from the wa.me link text param
+        import urllib.parse
+        link = data["whatsapp_link"]
+        qs = urllib.parse.parse_qs(urllib.parse.urlparse(link).query)
+        message = qs.get("text", [""])[0]
+        token = message.split("|")[-1].strip()
+
+        # Create a user to complete the session
+        user = User(phone="972546100100", role=UserRole.passenger)
+        db.add(user)
+        await db.flush()
+        user_id = str(user.id)
+
+        # Simulate webhook completing auth
+        ok = await complete_wa_auth_session(token, user_id, "passenger")
+        assert ok
+
+        # Poll — should now be completed
+        resp = await client.get(f"/auth/wa/poll/{session_id}")
+        assert resp.status_code == 200
+        result = resp.json()
+        assert result["status"] == "completed"
+        assert result["access_token"] is not None
+        assert result["refresh_token"] is not None
+        assert result["role"] == "passenger"
+
+    async def test_link_contains_platform_phone(self, client):
+        resp = await client.post(
+            "/auth/wa/request",
+            json={"phone": "0501234567", "role": "passenger"},
+        )
+        link = resp.json()["whatsapp_link"]
+        # Should point to the platform's own number
+        assert "972546363350" in link
+
+
+# ---------------------------------------------------------------------------
+# Phone normalization
+# ---------------------------------------------------------------------------
+
+class TestPhoneNormalization:
+    def test_local_format(self):
+        from core.security import normalize_phone
+        assert normalize_phone("0546363350") == "972546363350"
+
+    def test_international_plus(self):
+        from core.security import normalize_phone
+        assert normalize_phone("+972546363350") == "972546363350"
+
+    def test_international_no_plus(self):
+        from core.security import normalize_phone
+        assert normalize_phone("972546363350") == "972546363350"
+
+    def test_strips_spaces_and_dashes(self):
+        from core.security import normalize_phone
+        assert normalize_phone("+972 54-636-3350") == "972546363350"
+

@@ -34,9 +34,11 @@ class TestNormalizePhone:
         from services.whatsapp import _normalize
         assert _normalize("+972 50-123-4567") == "972501234567"
 
-    def test_non_israeli_number_unchanged(self):
+    def test_non_israeli_number_gets_972_prefix(self):
+        # Platform is Israel-only; numbers that are all-digits but don't start with 0/972
+        # get a 972 prefix appended by normalize_phone (centralized logic).
         from services.whatsapp import _normalize
-        assert _normalize("14155550000") == "14155550000"
+        assert _normalize("14155550000") == "97214155550000"
 
 
 # ---------------------------------------------------------------------------

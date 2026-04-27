@@ -6,31 +6,154 @@ from core.config import settings
 from core.database import get_db
 from core.dependencies import get_current_user
 from core.security import (
+    WA_AUTH_MESSAGE_PREFIX,
+    WA_AUTH_TTL_SECONDS,
     create_access_token,
     create_otp,
     create_refresh_token,
+    create_wa_auth_session,
+    get_wa_session_result,
+    normalize_phone,
     revoke_refresh_token,
     rotate_refresh_token,
     verify_otp,
+    wa_session_is_pending,
 )
 from models.audit import AuditAction
 from models.user import User, UserRole
-from schemas.auth import AdminLoginRequest, OTPRequest, OTPVerify, RefreshRequest, TokenResponse, UserRead
+from schemas.auth import (
+    AdminLoginRequest,
+    OTPRequest,
+    OTPVerify,
+    RefreshRequest,
+    TokenResponse,
+    UserRead,
+    WAAuthLinkResponse,
+    WAAuthPollResponse,
+    WAAuthRequest,
+)
 from security.audit import audit
-from services import whatsapp as whatsapp_svc
 from services import persona as persona_svc
+from services import whatsapp as whatsapp_svc
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+# ---------------------------------------------------------------------------
+# NEW: WhatsApp link authentication (primary flow)
+# ---------------------------------------------------------------------------
+
+def _build_kyc_url(user: User) -> str | None:
+    """Shared helper — build Persona KYC URL for a driver."""
+    return None  # will be populated below if settings are present
+
+
+@router.post(
+    "/wa/request",
+    response_model=WAAuthLinkResponse,
+    status_code=status.HTTP_200_OK,
+    summary="התחלת אימות דרך וואטסאפ — מקבל קישור לשליחת הודעה",
+)
+async def request_wa_auth(body: WAAuthRequest) -> WAAuthLinkResponse:
+    """
+    Primary authentication method.
+
+    1. Client submits phone + desired role.
+    2. Server generates a one-time token and a wa.me deep link.
+    3. User taps the link → WhatsApp opens with a pre-filled auth message.
+    4. User sends the message → platform webhook processes it → JWT issued.
+    5. Client polls GET /auth/wa/poll/{session_id} to receive the tokens.
+
+    Supports any Israeli phone format:
+      0546363350 | 972546363350 | +972546363350
+    """
+    session_id, token = await create_wa_auth_session(body.phone, body.role.value)
+
+    # The message the user will send to the platform's WhatsApp
+    auth_message = f"{WA_AUTH_MESSAGE_PREFIX} אמת אותי | {token}"
+
+    # wa.me deep link that pre-populates the message
+    import urllib.parse
+    encoded_text = urllib.parse.quote(auth_message)
+    platform_number = settings.WHATSAPP_PLATFORM_PHONE
+    whatsapp_link = f"https://wa.me/{platform_number}?text={encoded_text}"
+
+    return WAAuthLinkResponse(
+        session_id=session_id,
+        whatsapp_link=whatsapp_link,
+        message_preview=auth_message,
+        expires_in_seconds=WA_AUTH_TTL_SECONDS,
+    )
+
+
+@router.get(
+    "/wa/poll/{session_id}",
+    response_model=WAAuthPollResponse,
+    summary="בדיקת סטטוס אימות וואטסאפ — polling",
+)
+async def poll_wa_auth(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> WAAuthPollResponse:
+    """
+    Poll for WhatsApp auth completion.
+    Returns:
+      - {"status": "pending"}              — user hasn't sent the message yet
+      - {"status": "completed", access_token, refresh_token, role, kyc_url}
+      - {"status": "expired"}              — session expired (5 min TTL)
+    """
+    result = await get_wa_session_result(session_id)
+    if result is None:
+        # Distinguish "pending" from "expired"
+        if await wa_session_is_pending(session_id):
+            return WAAuthPollResponse(status="pending")
+        return WAAuthPollResponse(status="expired")
+
+    # Completed — build KYC URL if driver
+    kyc_url: str | None = None
+    if result.get("role") == UserRole.driver.value and settings.PERSONA_API_KEY and settings.PERSONA_TEMPLATE_ID:
+        # Find user by looking up the token's subject
+        from core.security import decode_access_token
+        try:
+            payload = decode_access_token(result["access_token"])
+            user_id = payload["sub"]
+            from sqlalchemy import select
+            res = await db.execute(select(User).where(User.id == user_id))
+            user = res.scalar_one_or_none()
+            if user:
+                try:
+                    inquiry = await persona_svc.create_inquiry(db, user.id)
+                    if inquiry.session_token:
+                        kyc_url = (
+                            f"https://withpersona.com/verify"
+                            f"?inquiry-id={inquiry.persona_inquiry_id}"
+                            f"&session-token={inquiry.session_token}"
+                        )
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    return WAAuthPollResponse(
+        status="completed",
+        access_token=result["access_token"],
+        refresh_token=result["refresh_token"],
+        role=result["role"],
+        kyc_url=kyc_url,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Legacy OTP flow (kept for backward compatibility / admin tooling)
+# ---------------------------------------------------------------------------
+
 @router.post(
     "/otp/request",
-    summary="Request a one-time password via WhatsApp",
+    summary="[Legacy] Request a one-time password via WhatsApp",
     status_code=status.HTTP_200_OK,
 )
 async def request_otp(body: OTPRequest, request: Request, db: AsyncSession = Depends(get_db)) -> dict:
     otp = await create_otp(body.phone)
-    # שולח OTP לוואטסאפ של הלקוח/נהג (fire-and-forget; falls back gracefully if disconnected)
     await whatsapp_svc.send_otp(body.phone, otp)
     response: dict = {"message": "OTP נשלח לוואטסאפ שלך"}
     if settings.DEBUG:

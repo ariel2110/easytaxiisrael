@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     EVOLUTION_URL: str = "http://evolution-api:8080"
     EVOLUTION_API_KEY: str = "evolution_secret"
     EVOLUTION_INSTANCE: str = "easytaxi"
+    # Platform's own WhatsApp phone number (digits only, with country code, no +)
+    # Users send auth messages TO this number.
+    WHATSAPP_PLATFORM_PHONE: str = "972546363350"
 
     # Persona KYC (https://withpersona.com)
     PERSONA_API_KEY: str = ""

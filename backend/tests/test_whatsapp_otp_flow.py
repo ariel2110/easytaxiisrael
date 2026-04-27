@@ -74,7 +74,7 @@ class TestPassengerOtpFlow:
         assert resp.status_code == 200
         # WhatsApp was called
         assert len(captured) == 1
-        assert captured[0][0] == "+972501500003"
+        assert captured[0][0] == "972501500003"
         # OTP is 6 digits
         assert len(captured[0][1]) == 6
         assert captured[0][1].isdigit()
