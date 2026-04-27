@@ -15,7 +15,7 @@ auth_screen_old = """<div id="auth-screen">
   </div>
   <div class="card" id="step-otp" style="display:none">
     <div style="font-size:2.5rem;margin-bottom:14px">🔑</div>
-    <h2>קוד SMS</h2>
+    <h2>קוד וואטסאפ</h2>
     <p>נשלח ל-<span id="show-phone" style="color:var(--wa)"></span></p>
     <div class="form-group"><label>קוד (6 ספרות)</label><input type="text" id="otp-input" placeholder="123456" dir="ltr" maxlength="6" inputmode="numeric"></div>
     <button class="btn btn-yellow" style="width:100%;padding:12px;font-size:.95rem;margin-bottom:8px" onclick="verOTP()">המשך</button>

@@ -31,28 +31,28 @@ export default function Login() {
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <div style={{ fontSize: '2.5rem' }}>🚀</div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginTop: '.5rem' }}>RideOS</h1>
-          <p style={{ color: 'var(--text-secondary)', marginTop: '.25rem' }}>Your ride, on demand</p>
+          <p style={{ color: 'var(--text-secondary)', marginTop: '.25rem' }}>הכנס את מספר הוואטסאפ שלך</p>
         </div>
 
         {step === 'phone' ? (
           <>
-            <label style={{ display: 'block', marginBottom: '.5rem', fontSize: '.875rem', color: 'var(--text-secondary)' }}>Mobile number</label>
-            <input className="input" type="tel" placeholder="+1 555 000 0000" value={phone} onChange={e => setPhone(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendOtp()} />
+            <label style={{ display: 'block', marginBottom: '.5rem', fontSize: '.875rem', color: 'var(--text-secondary)' }}>מספר וואטסאפ</label>
+            <input className="input" type="tel" placeholder="+972 50 000 0000" value={phone} onChange={e => setPhone(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendOtp()} />
             <button className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }} disabled={busy} onClick={sendOtp}>
-              {busy ? 'Sending…' : 'Get OTP →'}
+              {busy ? 'שולח…' : 'שלח קוד בוואטסאפ →'}
             </button>
           </>
         ) : (
           <>
             <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)', fontSize: '.875rem' }}>
-              Code sent to <strong style={{ color: 'var(--text-primary)' }}>{phone}</strong>
+              📱 קוד אימות נשלח לוואטסאפ של <strong style={{ color: 'var(--text-primary)' }}>{phone}</strong>
             </p>
             <input className="input" type="text" inputMode="numeric" placeholder="123456" maxLength={6} value={otp} onChange={e => setOtp(e.target.value)} onKeyDown={e => e.key === 'Enter' && verify()} style={{ letterSpacing: '.3em', textAlign: 'center', fontSize: '1.5rem' }} />
             <button className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }} disabled={busy} onClick={verify}>
-              {busy ? 'Verifying…' : 'Verify →'}
+              {busy ? 'מאמת…' : 'אמת והתחבר →'}
             </button>
             <button style={{ width: '100%', marginTop: '.5rem', color: 'var(--text-secondary)', fontSize: '.875rem', padding: '.5rem' }} onClick={() => setStep('phone')}>
-              ← Back
+              ← שנה מספר
             </button>
           </>
         )}

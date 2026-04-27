@@ -24,7 +24,7 @@ class PushEvent(str, Enum):
     ride_cancelled     = "ride_cancelled"
     driver_arriving    = "driver_arriving"
     payment_received   = "payment_received"
-    otp_code           = "otp_code"           # fallback if SMS fails
+    otp_code           = "otp_code"           # fallback if WhatsApp fails
 
 
 # Templates: event → (title, body template)

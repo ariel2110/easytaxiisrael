@@ -42,18 +42,18 @@ export default function Login() {
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <div style={{ fontSize: '2rem' }}>🚗</div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginTop: '0.5rem' }}>RideOS Driver</h1>
-          <p style={{ color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Sign in to start accepting rides</p>
+          <p style={{ color: 'var(--text-secondary)', marginTop: '0.25rem' }}>הכנס את מספר הוואטסאפ שלך</p>
         </div>
 
         {step === 'phone' ? (
           <>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-              Phone number
+              מספר וואטסאפ
             </label>
             <input
               className="input"
               type="tel"
-              placeholder="+1 555 000 0000"
+              placeholder="+972 50 000 0000"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleRequestOtp()}
@@ -64,13 +64,13 @@ export default function Login() {
               disabled={busy}
               onClick={handleRequestOtp}
             >
-              {busy ? 'Sending…' : 'Send OTP'}
+              {busy ? 'שולח…' : 'שלח קוד בוואטסאפ'}
             </button>
           </>
         ) : (
           <>
             <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-              Enter the 6-digit code sent to <strong style={{ color: 'var(--text-primary)' }}>{phone}</strong>
+              📱 קוד אימות נשלח לוואטסאפ של <strong style={{ color: 'var(--text-primary)' }}>{phone}</strong>
             </p>
             <input
               className="input"
@@ -89,13 +89,13 @@ export default function Login() {
               disabled={busy}
               onClick={handleVerify}
             >
-              {busy ? 'Verifying…' : 'Verify & Sign In'}
+              {busy ? 'מאמת…' : 'אמת והתחבר'}
             </button>
             <button
               style={{ width: '100%', marginTop: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.875rem', padding: '0.5rem' }}
               onClick={() => setStep('phone')}
             >
-              ← Change number
+              ← שנה מספר
             </button>
           </>
         )}

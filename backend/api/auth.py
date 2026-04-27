@@ -24,14 +24,14 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post(
     "/otp/request",
-    summary="Request a one-time password via phone",
+    summary="Request a one-time password via WhatsApp",
     status_code=status.HTTP_200_OK,
 )
 async def request_otp(body: OTPRequest, request: Request, db: AsyncSession = Depends(get_db)) -> dict:
     otp = await create_otp(body.phone)
-    # Send OTP via WhatsApp (fire-and-forget; falls back gracefully if disconnected)
+    # שולח OTP לוואטסאפ של הלקוח/נהג (fire-and-forget; falls back gracefully if disconnected)
     await whatsapp_svc.send_otp(body.phone, otp)
-    response: dict = {"message": "OTP sent"}
+    response: dict = {"message": "OTP נשלח לוואטסאפ שלך"}
     if settings.DEBUG:
         response["otp"] = otp   # dev convenience — NEVER in production
     await audit(db, AuditAction.otp_requested,
