@@ -1,0 +1,235 @@
+version: "3.9"
+
+services:
+  # ── PostgreSQL ──────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rideos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rideos_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-rideos}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rideos}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rideos_net
+
+  # ── Redis ───────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning --requirepass ${REDIS_PASSWORD:-redis_secret}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secret}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rideos_net
+
+  # ── Backend API ─────────────────────────────────────────────
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      DEBUG: "false"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-rideos}:${POSTGRES_PASSWORD:-rideos_secret}@postgres:5432/${POSTGRES_DB:-rideos}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379/0
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-15}
+      FARE_BASE: ${FARE_BASE:-2.50}
+      FARE_PER_KM: ${FARE_PER_KM:-1.20}
+      PLATFORM_FEE_PCT: ${PLATFORM_FEE_PCT:-15.0}
+      TAX_PCT: ${TAX_PCT:-10.0}
+      EVOLUTION_URL: "http://evolution-api:8080"
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-evolution_secret}
+      EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-easytaxi}
+      LOG_LEVEL: "INFO"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      SERPER_API_KEY: ${SERPER_API_KEY:-}
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - rideos_net
+    expose:
+      - "8000"
+
+  # ── ARQ Background Worker ────────────────────────────────────
+  worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: arq worker.WorkerSettings
+    environment:
+      APP_ENV: production
+      DEBUG: "false"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-rideos}:${POSTGRES_PASSWORD:-rideos_secret}@postgres:5432/${POSTGRES_DB:-rideos}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379/0
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-15}
+      FARE_BASE: ${FARE_BASE:-2.50}
+      FARE_PER_KM: ${FARE_PER_KM:-1.20}
+      PLATFORM_FEE_PCT: ${PLATFORM_FEE_PCT:-15.0}
+      TAX_PCT: ${TAX_PCT:-10.0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - rideos_net
+
+  # ── Prometheus ───────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+    networks:
+      - rideos_net
+    expose:
+      - "9090"
+
+  # ── Grafana ──────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.0.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-grafana_secret}
+      GF_SERVER_ROOT_URL: "https://easytaxiisrael.com/grafana/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - rideos_net
+    expose:
+      - "3000"
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - rideos_net
+
+  # ── Evolution API (WhatsApp gateway) ────────────────────────
+  evolution-api:
+    image: atendai/evolution-api:v1.8.7
+    restart: unless-stopped
+    volumes:
+      - evolution_data:/evolution/instances
+    environment:
+      SERVER_URL: "https://easytaxiisrael.com"
+      AUTHENTICATION_API_KEY: "${EVOLUTION_API_KEY:-evolution_secret}"
+      DATABASE_ENABLED: "true"
+      DATABASE_CONNECTION_URI: "mongodb://mongo:27017/?authSource=admin"
+      DATABASE_CONNECTION_DB_PREFIX_NAME: "evolution"
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "false"
+      DATABASE_SAVE_MESSAGE_UPDATE: "false"
+      DATABASE_SAVE_DATA_CONTACTS: "false"
+      DATABASE_SAVE_DATA_CHATS: "false"
+      REDIS_ENABLED: "false"
+      QRCODE_LIMIT: "30"
+      LOG_LEVEL: "ERROR"
+      DEL_INSTANCE: "false"
+      CORS_ORIGIN: "*"
+    depends_on:
+      - mongo
+    networks:
+      - rideos_net
+    expose:
+      - "8080"
+
+  # ── Driver Webapp (static build) ────────────────────────────
+  driver-webapp:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ../driver-webapp/dist:/usr/share/nginx/html:ro
+      - ./nginx/spa.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - rideos_net
+    expose:
+      - "80"
+
+  # ── Passenger Webapp (static build) ─────────────────────────
+  passenger-webapp:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ../passenger-webapp/dist:/usr/share/nginx/html:ro
+      - ./nginx/spa.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - rideos_net
+    expose:
+      - "80"
+
+  # ── Nginx reverse proxy ──────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - certbot_webroot:/var/www/certbot:ro
+    depends_on:
+      - backend
+      - driver-webapp
+      - passenger-webapp
+    networks:
+      - rideos_net
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+  certbot_webroot:
+  evolution_data:
+  mongo_data:
+
+networks:
+  rideos_net:
+    driver: bridge
+

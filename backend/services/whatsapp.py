@@ -1,0 +1,171 @@
+"""
+WhatsApp service via Evolution API.
+
+Usage:
+    from services.whatsapp import send_text
+    await send_text("+972501234567", "ההודעה שלך")
+
+All public helpers are fire-and-forget safe — they catch every exception
+and log a warning rather than crashing the caller.
+"""
+
+import logging
+import re
+
+import httpx
+
+from core.config import settings
+
+logger = logging.getLogger(__name__)
+
+_BASE = settings.EVOLUTION_URL.rstrip("/")
+_KEY  = settings.EVOLUTION_API_KEY
+_INST = settings.EVOLUTION_INSTANCE
+_HDRS = {"apikey": _KEY, "Content-Type": "application/json"}
+
+
+def _normalize(phone: str) -> str:
+    """Strip non-digit characters; ensure 972 prefix for Israeli numbers."""
+    digits = re.sub(r"\D", "", phone)
+    if digits.startswith("0"):
+        digits = "972" + digits[1:]
+    return digits
+
+
+async def _post(path: str, payload: dict) -> dict | None:
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            r = await client.post(f"{_BASE}/{path}", json=payload, headers=_HDRS)
+            if r.status_code in (200, 201):
+                return r.json()
+            logger.warning("WhatsApp API %s → %s %s", path, r.status_code, r.text[:200])
+    except Exception as exc:
+        logger.warning("WhatsApp send failed: %s", exc)
+    return None
+
+
+async def send_text(phone: str, text: str) -> bool:
+    """Send a plain-text WhatsApp message. Returns True on success."""
+    number = _normalize(phone)
+    result = await _post(
+        f"message/sendText/{_INST}",
+        {"number": number, "textMessage": {"text": text}},
+    )
+    return result is not None
+
+
+# ── High-level helpers ────────────────────────────────────────
+
+async def send_otp(phone: str, otp: str) -> bool:
+    msg = (
+        f"🚕 *EasyTaxi Israel*\n\n"
+        f"קוד האימות שלך: *{otp}*\n\n"
+        f"תקף ל-5 דקות. אל תשתף אותו עם אף אחד."
+    )
+    return await send_text(phone, msg)
+
+
+async def notify_ride_assigned(passenger_phone: str, driver_phone: str | None, ride_id: str) -> None:
+    short = str(ride_id)[:8]
+    await send_text(passenger_phone,
+        f"🚕 *EasyTaxi* — נמצא לך נהג!\n"
+        f"נסיעה #{short} — הנהג בדרך אליך.\n"
+        f"עקוב בזמן אמת: https://easytaxiisrael.com/passenger.html")
+
+
+async def notify_ride_started(passenger_phone: str, ride_id: str) -> None:
+    short = str(ride_id)[:8]
+    await send_text(passenger_phone,
+        f"🟢 *EasyTaxi* — הנסיעה התחילה!\n"
+        f"נסיעה #{short} — נסיעה טובה! 🚀")
+
+
+async def notify_ride_completed(passenger_phone: str, fare_ils: float, ride_id: str) -> None:
+    short = str(ride_id)[:8]
+    await send_text(passenger_phone,
+        f"✅ *EasyTaxi* — הנסיעה הסתיימה\n"
+        f"נסיעה #{short}\n"
+        f"💳 סכום: ₪{fare_ils:.2f}\n"
+        f"תודה שנסעת איתנו! ⭐")
+
+
+async def notify_ride_cancelled(phone: str, ride_id: str, by: str = "system") -> None:
+    short = str(ride_id)[:8]
+    who = "הנסיעה בוטלה" if by == "system" else f"הנסיעה בוטלה על ידי {'הנוסע' if by == 'passenger' else 'הנהג'}"
+    await send_text(phone,
+        f"❌ *EasyTaxi* — {who}\nנסיעה #{short}")
+
+
+async def notify_driver_new_ride(driver_phone: str, ride_id: str, pickup: str) -> None:
+    short = str(ride_id)[:8]
+    await send_text(driver_phone,
+        f"🔔 *EasyTaxi* — נסיעה חדשה!\n"
+        f"נסיעה #{short}\n"
+        f"📍 מוצא: {pickup}\n"
+        f"היכנס לאפליקציה לקבל: https://driver.easytaxiisrael.com")
+
+
+# ── Instance management helpers (called from setup page) ─────
+
+async def create_instance() -> dict | None:
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(
+                f"{_BASE}/instance/create",
+                json={
+                    "instanceName": _INST,
+                    "qrcode": True,
+                    "integration": "WHATSAPP-BAILEYS",
+                },
+                headers=_HDRS,
+            )
+            return r.json() if r.status_code in (200, 201) else None
+    except Exception as exc:
+        logger.warning("create_instance failed: %s", exc)
+        return None
+
+
+async def get_qrcode() -> dict | None:
+    """Returns {base64, code} or None if not ready."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                f"{_BASE}/instance/fetchInstances",
+                headers=_HDRS,
+            )
+            if r.status_code != 200:
+                return None
+            instances = r.json()
+            for inst in (instances if isinstance(instances, list) else [instances]):
+                if inst.get("instance", {}).get("instanceName") == _INST:
+                    state = inst.get("instance", {}).get("connectionStatus", "")
+                    if state == "open":
+                        return {"connected": True, "state": state}
+                    # fetch QR
+                    qr = await client.get(
+                        f"{_BASE}/instance/connect/{_INST}",
+                        headers=_HDRS,
+                    )
+                    if qr.status_code == 200:
+                        data = qr.json()
+                        return {"connected": False, "state": state, **data}
+        return None
+    except Exception as exc:
+        logger.warning("get_qrcode failed: %s", exc)
+        return None
+
+
+async def get_connection_state() -> str:
+    """Returns: 'open' | 'connecting' | 'close' | 'unknown'"""
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(
+                f"{_BASE}/instance/connectionState/{_INST}",
+                headers=_HDRS,
+            )
+            if r.status_code == 200:
+                data = r.json()
+                return data.get("instance", {}).get("state", "unknown")
+    except Exception:
+        pass
+    return "unknown"

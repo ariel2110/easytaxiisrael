@@ -1,0 +1,50 @@
+import enum
+import uuid
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, Enum, Index, String
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql import func
+
+from core.database import Base
+from security.encryption import EncryptedString
+
+
+class UserRole(str, enum.Enum):
+    driver = "driver"
+    passenger = "passenger"
+    admin = "admin"
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    __table_args__ = (
+        # Used by _find_available_driver() and compliance queries — avoids full table scan
+        Index("ix_users_role_is_active", "role", "is_active"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    phone: Mapped[str] = mapped_column(
+        EncryptedString, unique=True, nullable=False, index=True
+    )
+    role: Mapped[UserRole] = mapped_column(Enum(UserRole), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # FCM / APNs device token — updated by client on login
+    device_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Terms of Service acceptance timestamp — required before first ride
+    tos_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )

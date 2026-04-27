@@ -1,0 +1,93 @@
+{
+  "title": "RideOS Platform",
+  "uid": "rideos-main",
+  "schemaVersion": 38,
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Rides Created (total)",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 3 },
+      "targets": [{ "expr": "rideos_rides_created_total", "datasource": "Prometheus" }],
+      "options": { "colorMode": "background", "graphMode": "area" }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Rides Completed (total)",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 3 },
+      "targets": [{ "expr": "rideos_rides_completed_total", "datasource": "Prometheus" }],
+      "options": { "colorMode": "background", "graphMode": "area" }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Rides Cancelled (total)",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 3 },
+      "targets": [{ "expr": "rideos_rides_cancelled_total", "datasource": "Prometheus" }],
+      "options": { "colorMode": "background", "graphMode": "area" }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Active WebSocket Connections",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 3 },
+      "targets": [{ "expr": "rideos_ws_connections_active", "datasource": "Prometheus" }],
+      "options": { "colorMode": "value" }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Surge Multiplier",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 3 },
+      "targets": [{ "expr": "rideos_surge_multiplier", "datasource": "Prometheus" }],
+      "options": { "colorMode": "background" }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Ride Throughput (per minute)",
+      "gridPos": { "x": 0, "y": 3, "w": 12, "h": 7 },
+      "targets": [
+        { "expr": "rate(rideos_rides_created_total[1m])", "legendFormat": "created/min", "datasource": "Prometheus" },
+        { "expr": "rate(rideos_rides_completed_total[1m])", "legendFormat": "completed/min", "datasource": "Prometheus" },
+        { "expr": "rate(rideos_rides_cancelled_total[1m])", "legendFormat": "cancelled/min", "datasource": "Prometheus" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Payment Processing Rate",
+      "gridPos": { "x": 12, "y": 3, "w": 12, "h": 7 },
+      "targets": [
+        { "expr": "rate(rideos_payments_processed_total{status=\"completed\"}[1m])", "legendFormat": "completed/min", "datasource": "Prometheus" },
+        { "expr": "rate(rideos_payments_processed_total{status=\"failed\"}[1m])", "legendFormat": "failed/min", "datasource": "Prometheus" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "HTTP Request Latency P95 (ms)",
+      "gridPos": { "x": 0, "y": 10, "w": 12, "h": 7 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, handler)) * 1000",
+          "legendFormat": "{{handler}}",
+          "datasource": "Prometheus"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Auth Errors & Anomalies",
+      "gridPos": { "x": 12, "y": 10, "w": 12, "h": 7 },
+      "targets": [
+        { "expr": "rate(rideos_auth_errors_total[1m])", "legendFormat": "auth errors/min", "datasource": "Prometheus" },
+        { "expr": "rate(rideos_anomalies_detected_total[1m])", "legendFormat": "anomalies/min by type", "datasource": "Prometheus" }
+      ]
+    }
+  ]
+}

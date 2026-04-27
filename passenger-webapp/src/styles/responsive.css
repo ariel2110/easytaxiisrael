@@ -1,0 +1,25 @@
+/* ===========================
+   Responsive breakpoints
+   =========================== */
+
+@media (min-width: 640px) {
+  .page-content { padding: 1.5rem; }
+  .card { padding: 1.5rem; }
+}
+
+@media (min-width: 1024px) {
+  body { display: flex; justify-content: center; }
+  #root { max-width: 480px; width: 100%; box-shadow: 0 0 60px rgba(0,0,0,.6); }
+}
+
+button, a { min-height: 44px; min-width: 44px; }
+* { max-width: 100%; }
+
+@media (max-width: 480px) {
+  .input { font-size: 16px; }
+}
+
+.page-content {
+  padding-left:  max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
