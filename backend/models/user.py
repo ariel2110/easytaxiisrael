@@ -17,6 +17,11 @@ class UserRole(str, enum.Enum):
     admin = "admin"
 
 
+class DriverType(str, enum.Enum):
+    licensed_taxi = "licensed_taxi"   # נהג מונית מורשה — רישיון D בתוקף
+    rideshare     = "rideshare"       # נהג שיתופי (הובר/אובר) — ממתין לחקיקה
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -32,6 +37,10 @@ class User(Base):
         EncryptedString, unique=True, nullable=False, index=True
     )
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), nullable=False)
+    # For drivers only: licensed_taxi (מונית מורשה) or rideshare (הובר/אובר)
+    driver_type: Mapped[DriverType | None] = mapped_column(
+        Enum(DriverType), nullable=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # FCM / APNs device token — updated by client on login
     device_token: Mapped[str | None] = mapped_column(String(255), nullable=True)

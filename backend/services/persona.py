@@ -194,8 +194,9 @@ async def handle_webhook_event(
     """
     Process a single Persona webhook event:
     1. Update the local PersonaInquiry status.
-    2. On approval → unlock driver compliance profile.
-    3. On decline  → block driver compliance profile.
+    2. Route to identity or vehicle handler based on template_id.
+       - Identity template  → unlock / block DriverComplianceProfile.
+       - Vehicle template   → update VehicleCompliance document flags.
     """
     result = await db.execute(
         select(PersonaInquiry).where(
@@ -211,10 +212,27 @@ async def handle_webhook_event(
         inquiry.status = new_status
         inquiry.updated_at = datetime.now(timezone.utc)
 
-    if event_name == "inquiry.approved":
-        await _handle_approval(db, inquiry.driver_id)
-    elif event_name == "inquiry.declined":
-        await _handle_decline(db, inquiry.driver_id)
+    is_vehicle_template = (
+        inquiry.template_id == settings.PERSONA_VEHICLE_TEMPLATE_ID
+        and settings.PERSONA_VEHICLE_TEMPLATE_ID
+    )
+
+    if is_vehicle_template:
+        # Route to vehicle compliance handler
+        from services.vehicle import (
+            handle_vehicle_inquiry_approved,
+            handle_vehicle_inquiry_declined,
+        )
+        if event_name == "inquiry.approved":
+            await handle_vehicle_inquiry_approved(db, inquiry.driver_id, persona_inquiry_id)
+        elif event_name == "inquiry.declined":
+            await handle_vehicle_inquiry_declined(db, inquiry.driver_id, persona_inquiry_id)
+    else:
+        # Identity template — update DriverComplianceProfile
+        if event_name == "inquiry.approved":
+            await _handle_approval(db, inquiry.driver_id)
+        elif event_name == "inquiry.declined":
+            await _handle_decline(db, inquiry.driver_id)
 
     await db.commit()
 

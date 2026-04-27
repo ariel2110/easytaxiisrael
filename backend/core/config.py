@@ -48,7 +48,8 @@ class Settings(BaseSettings):
     # Persona KYC (https://withpersona.com)
     PERSONA_API_KEY: str = ""
     PERSONA_WEBHOOK_SECRET: str = ""
-    PERSONA_TEMPLATE_ID: str = ""          # inquiry template ID from Persona dashboard
+    PERSONA_TEMPLATE_ID: str = ""          # inquiry template ID — identity KYC (GovID + Selfie)
+    PERSONA_VEHICLE_TEMPLATE_ID: str = "itmpl_ACtCnpSYUfM5hTMSUV5UYzeYfVZZUx"  # vehicle docs + photos
     PERSONA_API_VERSION: str = "2025-12-08"
 
     # ── Multi-Agent System — LLM API keys (all optional; agents fall back gracefully) ──

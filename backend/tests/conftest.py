@@ -48,7 +48,9 @@ import models.location    # noqa: F401
 import models.payment     # noqa: F401
 import models.persona     # noqa: F401
 import models.rating      # noqa: F401
+import models.rideshare   # noqa: F401
 import models.ride        # noqa: F401
+import models.vehicle     # noqa: F401
 
 _TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 _test_engine = create_async_engine(_TEST_DB_URL, echo=False)
