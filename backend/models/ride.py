@@ -74,6 +74,9 @@ class Ride(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # Fare — populated by payment service after ride completes
+    fare_ils: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     # Relationships (lazy="raise" prevents accidental sync I/O)
     passenger = relationship(
         "User", foreign_keys=[passenger_id], lazy="raise"

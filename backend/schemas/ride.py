@@ -56,5 +56,6 @@ class RideRead(BaseModel):
     started_at: datetime | None
     completed_at: datetime | None
     cancelled_at: datetime | None
+    fare_ils: float | None
 
     model_config = {"from_attributes": True}

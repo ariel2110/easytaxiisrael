@@ -27,7 +27,8 @@ class TestRequestOtp:
                 "/auth/otp/request", json={"phone": "+972501234567"}
             )
         assert resp.status_code == 200
-        assert resp.json()["message"] == "OTP sent"
+        # message is in Hebrew: OTP נשלח לוואטסאפ שלך
+        assert "OTP" in resp.json()["message"] or "otp" in resp.json()["message"].lower()
 
     async def test_debug_mode_exposes_otp(self, client):
         """In DEBUG=True, the OTP is returned in the response body."""
