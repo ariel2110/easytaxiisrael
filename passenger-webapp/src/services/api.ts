@@ -1,4 +1,4 @@
-import type { TokenPair, User, Ride, FareEstimate, RideRequest } from '../types'
+import type { User, Ride, FareEstimate, RideRequest } from '../types'
 
 const BASE = '/api'
 
@@ -12,10 +12,29 @@ async function request<T>(method: string, path: string, body?: unknown, auth = t
   return res.json() as Promise<T>
 }
 
+export interface WaAuthLinkResponse {
+  session_id: string
+  whatsapp_link: string
+  message_preview: string
+  expires_in_seconds: number
+}
+
+export interface WaPollResponse {
+  status: 'pending' | 'completed' | 'expired'
+  access_token?: string
+  refresh_token?: string
+  role?: string
+  kyc_url?: string
+}
+
 export const api = {
   auth: {
-    requestOtp: (phone: string) => request<{ message: string }>('POST', '/auth/otp/request', { phone }, false),
-    verifyOtp:  (phone: string, otp: string) => request<TokenPair>('POST', '/auth/otp/verify', { phone, otp }, false),
+    /** New primary auth: request a wa.me deep link */
+    requestWaAuth: (phone: string, role: string = 'passenger') =>
+      request<WaAuthLinkResponse>('POST', '/auth/wa/request', { phone, role }, false),
+    /** Poll for token completion */
+    pollWaAuth: (session_id: string) =>
+      request<WaPollResponse>('GET', `/auth/wa/poll/${session_id}`, undefined, false),
     me: () => request<User>('GET', '/auth/me'),
     logout: () => request<{ message: string }>('POST', '/auth/logout', { refresh_token: localStorage.getItem('refresh_token') ?? '' }),
   },

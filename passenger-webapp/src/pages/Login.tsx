@@ -2,25 +2,15 @@ import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 
 export default function Login() {
-  const { requestOtp, verifyOtp, error } = useAuth()
+  const { requestWaAuth, cancelWaAuth, waSession, error } = useAuth()
   const [phone, setPhone] = useState('')
-  const [otp, setOtp] = useState('')
-  const [step, setStep] = useState<'phone' | 'otp'>('phone')
   const [busy, setBusy] = useState(false)
   const [localErr, setLocalErr] = useState<string | null>(null)
 
-  async function sendOtp() {
+  async function handleRequest() {
     if (!phone.trim()) return
     setBusy(true); setLocalErr(null)
-    try { await requestOtp(phone.trim()); setStep('otp') }
-    catch (e) { setLocalErr((e as Error).message) }
-    finally { setBusy(false) }
-  }
-
-  async function verify() {
-    if (!otp.trim()) return
-    setBusy(true); setLocalErr(null)
-    try { await verifyOtp(phone.trim(), otp.trim()) }
+    try { await requestWaAuth(phone.trim()) }
     catch (e) { setLocalErr((e as Error).message) }
     finally { setBusy(false) }
   }
@@ -31,28 +21,67 @@ export default function Login() {
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <div style={{ fontSize: '2.5rem' }}>🚀</div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginTop: '.5rem' }}>RideOS</h1>
-          <p style={{ color: 'var(--text-secondary)', marginTop: '.25rem' }}>הכנס את מספר הוואטסאפ שלך</p>
+          <p style={{ color: 'var(--text-secondary)', marginTop: '.25rem' }}>כניסה מהירה דרך וואטסאפ</p>
         </div>
 
-        {step === 'phone' ? (
+        {!waSession ? (
+          /* ── Step 1: enter phone ── */
           <>
-            <label style={{ display: 'block', marginBottom: '.5rem', fontSize: '.875rem', color: 'var(--text-secondary)' }}>מספר וואטסאפ</label>
-            <input className="input" type="tel" placeholder="+972 50 000 0000" value={phone} onChange={e => setPhone(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendOtp()} />
-            <button className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }} disabled={busy} onClick={sendOtp}>
-              {busy ? 'שולח…' : 'שלח קוד בוואטסאפ →'}
+            <label style={{ display: 'block', marginBottom: '.5rem', fontSize: '.875rem', color: 'var(--text-secondary)' }}>
+              מספר טלפון (וואטסאפ)
+            </label>
+            <input
+              className="input"
+              type="tel"
+              placeholder="05X-XXX-XXXX"
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleRequest()}
+              dir="ltr"
+            />
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%', marginTop: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '.5rem' }}
+              disabled={busy}
+              onClick={handleRequest}
+            >
+              {busy ? 'שולח…' : <><span style={{ fontSize: '1.1rem' }}>💬</span> כניסה דרך וואטסאפ</>}
             </button>
+            <p style={{ marginTop: '1rem', fontSize: '.8rem', color: 'var(--text-secondary)', textAlign: 'center', lineHeight: 1.6 }}>
+              תקבל קישור שיפתח את וואטסאפ עם הודעה מוכנה — פשוט שלח אותה לאימות
+            </p>
           </>
         ) : (
+          /* ── Step 2: open WhatsApp link + polling ── */
           <>
-            <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)', fontSize: '.875rem' }}>
-              📱 קוד אימות נשלח לוואטסאפ של <strong style={{ color: 'var(--text-primary)' }}>{phone}</strong>
-            </p>
-            <input className="input" type="text" inputMode="numeric" placeholder="123456" maxLength={6} value={otp} onChange={e => setOtp(e.target.value)} onKeyDown={e => e.key === 'Enter' && verify()} style={{ letterSpacing: '.3em', textAlign: 'center', fontSize: '1.5rem' }} />
-            <button className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }} disabled={busy} onClick={verify}>
-              {busy ? 'מאמת…' : 'אמת והתחבר →'}
-            </button>
-            <button style={{ width: '100%', marginTop: '.5rem', color: 'var(--text-secondary)', fontSize: '.875rem', padding: '.5rem' }} onClick={() => setStep('phone')}>
-              ← שנה מספר
+            <div style={{ textAlign: 'center', padding: '1rem 0' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '.75rem' }}>💬</div>
+              <p style={{ fontWeight: 600, marginBottom: '.5rem' }}>פתח את וואטסאפ ושלח את ההודעה</p>
+              <p style={{ fontSize: '.85rem', color: 'var(--text-secondary)', marginBottom: '1.25rem' }}>
+                לחץ על הכפתור — ההודעה כבר מוכנה לשליחה. לאחר השליחה תיכנס אוטומטית.
+              </p>
+              <a
+                href={waSession.whatsapp_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-primary"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '.5rem', textDecoration: 'none', padding: '.75rem 1.5rem', borderRadius: 'var(--radius)' }}
+              >
+                <span>📲</span> פתח וואטסאפ לאימות
+              </a>
+            </div>
+
+            {/* Polling indicator */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '.5rem', marginTop: '1.25rem', color: 'var(--text-secondary)', fontSize: '.85rem' }}>
+              <span className="spinner" style={{ width: 14, height: 14, border: '2px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 1s linear infinite' }} />
+              ממתין לאישור…
+            </div>
+
+            <button
+              style={{ width: '100%', marginTop: '1rem', color: 'var(--text-secondary)', fontSize: '.875rem', padding: '.5rem' }}
+              onClick={cancelWaAuth}
+            >
+              ← חזור
             </button>
           </>
         )}

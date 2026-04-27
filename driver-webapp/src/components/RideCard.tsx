@@ -1,4 +1,3 @@
-import { useNavigate } from 'react-router-dom'
 import type { Ride } from '../types'
 
 interface Props {

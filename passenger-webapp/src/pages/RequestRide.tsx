@@ -13,7 +13,7 @@ export default function RequestRide() {
 
   const [pickup, setPickup] = useState({ lat: DEFAULT_COORDS.lat, lng: DEFAULT_COORDS.lng })
   const [dropoff, setDropoff] = useState({ lat: 37.7850, lng: -122.4090 })
-  const [fare, setFare] = useState<FareEstimate | null>(null)
+  const [fare, _setFare] = useState<FareEstimate | null>(null)
   const [surge, setSurge] = useState<{ surge_multiplier: string; demand_level: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
