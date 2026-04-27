@@ -20,6 +20,7 @@ class TokenResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     role: str = "passenger"
+    kyc_url: str | None = None  # Persona hosted-flow URL for drivers; null for passengers
 
 
 class RefreshRequest(BaseModel):

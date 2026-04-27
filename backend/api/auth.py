@@ -18,6 +18,7 @@ from models.user import User, UserRole
 from schemas.auth import AdminLoginRequest, OTPRequest, OTPVerify, RefreshRequest, TokenResponse, UserRead
 from security.audit import audit
 from services import whatsapp as whatsapp_svc
+from services import persona as persona_svc
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -80,7 +81,27 @@ async def verify_otp_and_login(
     await audit(db, AuditAction.login, actor_id=user.id,
                 ip_address=request.client.host if request.client else None)
     await db.commit()
-    return TokenResponse(access_token=access, refresh_token=refresh, role=user.role.value)
+
+    # ── Persona KYC: auto-create inquiry for drivers after phone verification ──
+    kyc_url: str | None = None
+    if user.role == UserRole.driver and settings.PERSONA_API_KEY and settings.PERSONA_TEMPLATE_ID:
+        try:
+            inquiry = await persona_svc.create_inquiry(db, user.id)
+            if inquiry.session_token:
+                kyc_url = (
+                    f"https://withpersona.com/verify"
+                    f"?inquiry-id={inquiry.persona_inquiry_id}"
+                    f"&session-token={inquiry.session_token}"
+                )
+        except Exception:  # noqa: BLE001 — KYC failure must not block login
+            pass
+
+    return TokenResponse(
+        access_token=access,
+        refresh_token=refresh,
+        role=user.role.value,
+        kyc_url=kyc_url,
+    )
 
 
 @router.post(

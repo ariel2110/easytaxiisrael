@@ -148,6 +148,58 @@ class TestDriverOtpFlow:
         assert resp.status_code == 200
         assert resp.json()["role"] == "driver"
 
+    async def test_driver_gets_kyc_url_after_login(self, client):
+        """After phone OTP, driver should receive a Persona KYC URL."""
+        import httpx
+        import respx
+        from unittest.mock import patch as _patch
+
+        persona_response = {
+            "data": {
+                "id": "inq_driver_flow_001",
+                "attributes": {
+                    "status": "created",
+                    "session-token": "sess_driver_flow_tok",
+                },
+            }
+        }
+        with (
+            _patch("core.config.settings.PERSONA_API_KEY", "persona_sandbox_test"),
+            _patch("core.config.settings.PERSONA_TEMPLATE_ID", "itmpl_test"),
+            respx.mock(assert_all_called=False) as mock,
+        ):
+            mock.post("https://withpersona.com/api/v1/inquiries").mock(
+                return_value=httpx.Response(201, json=persona_response)
+            )
+            tokens = await _full_login(client, "+972502500010", role="driver")
+
+        assert tokens["kyc_url"] is not None
+        assert "inq_driver_flow_001" in tokens["kyc_url"]
+        assert "sess_driver_flow_tok" in tokens["kyc_url"]
+
+    async def test_passenger_does_not_get_kyc_url(self, client):
+        """Passengers do not go through KYC — kyc_url must be null."""
+        tokens = await _full_login(client, "+972501500010", role="passenger")
+        assert tokens.get("kyc_url") is None
+
+    async def test_driver_login_succeeds_even_if_persona_down(self, client):
+        """If Persona API is unreachable, login still returns tokens."""
+        import httpx
+        import respx
+
+        with (
+            patch("core.config.settings.PERSONA_API_KEY", "persona_sandbox_test"),
+            patch("core.config.settings.PERSONA_TEMPLATE_ID", "itmpl_test"),
+            respx.mock(assert_all_called=False) as mock,
+        ):
+            mock.post("https://withpersona.com/api/v1/inquiries").mock(
+                side_effect=httpx.ConnectError("unreachable")
+            )
+            tokens = await _full_login(client, "+972502500011", role="driver")
+
+        assert "access_token" in tokens
+        assert tokens["kyc_url"] is None  # graceful fallback
+
     async def test_driver_cannot_request_ride(self, client):
         phone = "+972502500003"
         tokens = await _full_login(client, phone, role="driver")

@@ -53,6 +53,9 @@ async def create_inquiry(db: AsyncSession, driver_id: uuid.UUID) -> PersonaInqui
     Call the Persona API to create a new inquiry for the given driver,
     persist a local record, and return it.
 
+    If there is already a pending/active inquiry (created/started/completed)
+    for this driver, return it instead of creating a duplicate.
+
     The caller receives the Persona-hosted-flow URL by combining
     the inquiry ID and session token:
         https://withpersona.com/verify?inquiry-id=<id>&session-token=<token>
@@ -62,6 +65,24 @@ async def create_inquiry(db: AsyncSession, driver_id: uuid.UUID) -> PersonaInqui
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Persona KYC is not configured on this server",
         )
+
+    # Return existing active inquiry instead of creating a duplicate
+    existing = await db.execute(
+        select(PersonaInquiry)
+        .where(
+            PersonaInquiry.driver_id == driver_id,
+            PersonaInquiry.status.in_([
+                PersonaInquiryStatus.created,
+                PersonaInquiryStatus.started,
+                PersonaInquiryStatus.completed,
+            ]),
+        )
+        .order_by(PersonaInquiry.created_at.desc())
+        .limit(1)
+    )
+    active = existing.scalar_one_or_none()
+    if active is not None:
+        return active
 
     payload = {
         "data": {
