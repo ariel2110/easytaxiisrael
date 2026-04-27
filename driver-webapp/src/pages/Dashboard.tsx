@@ -25,7 +25,7 @@ export default function Dashboard() {
 
   function handleLogout() {
     logout()
-    navigate('/login')
+    navigate('/')
   }
 
   return (

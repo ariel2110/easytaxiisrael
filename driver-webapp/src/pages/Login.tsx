@@ -1,14 +1,20 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
 type Step = 'home' | 'auth'
 
 export default function Login() {
-  const { requestWaAuth, cancelWaAuth, waSession, error } = useAuth()
+  const { user, requestWaAuth, cancelWaAuth, waSession, error } = useAuth()
+  const navigate = useNavigate()
   const [step, setStep] = useState<Step>('home')
   const [phone, setPhone] = useState('')
   const [busy, setBusy] = useState(false)
   const [localErr, setLocalErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (user) navigate('/onboarding', { replace: true })
+  }, [user, navigate])
 
   async function handleRequest() {
     if (!phone.trim()) return

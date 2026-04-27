@@ -1,12 +1,18 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 export default function Login() {
-    const { requestWaAuth, cancelWaAuth, waSession, error } = useAuth();
+    const { user, requestWaAuth, cancelWaAuth, waSession, error } = useAuth();
+    const navigate = useNavigate();
     const [step, setStep] = useState('home');
     const [phone, setPhone] = useState('');
     const [busy, setBusy] = useState(false);
     const [localErr, setLocalErr] = useState(null);
+    useEffect(() => {
+        if (user)
+            navigate('/onboarding', { replace: true });
+    }, [user, navigate]);
     async function handleRequest() {
         if (!phone.trim())
             return;

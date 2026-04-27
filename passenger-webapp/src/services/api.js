@@ -16,9 +16,7 @@ async function request(method, path, body, auth = true) {
 }
 export const api = {
     auth: {
-        /** New primary auth: request a wa.me deep link */
         requestWaAuth: (phone, role = 'passenger') => request('POST', '/auth/wa/request', { phone, role }, false),
-        /** Poll for token completion */
         pollWaAuth: (session_id) => request('GET', `/auth/wa/poll/${session_id}`, undefined, false),
         me: () => request('GET', '/auth/me'),
         logout: () => request('POST', '/auth/logout', { refresh_token: localStorage.getItem('refresh_token') ?? '' }),

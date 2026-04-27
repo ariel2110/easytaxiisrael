@@ -23,9 +23,7 @@ async function request(method, path, body, auth = true) {
 // ----- Auth -----
 export const api = {
     auth: {
-        /** New primary auth: request a wa.me deep link */
         requestWaAuth: (phone, role = 'driver') => request('POST', '/auth/wa/request', { phone, role }, false),
-        /** Poll for token completion */
         pollWaAuth: (session_id) => request('GET', `/auth/wa/poll/${session_id}`, undefined, false),
         me: () => request('GET', '/auth/me'),
         logout: () => request('POST', '/auth/logout', {
@@ -55,5 +53,19 @@ export const api = {
     compliance: {
         progress: () => request('GET', '/driver/compliance/progress'),
         status: () => request('GET', '/driver/compliance'),
+    },
+    // ----- Onboarding -----
+    onboarding: {
+        progress: () => request('GET', '/compliance/progress'),
+    },
+    // ----- Persona KYC -----
+    persona: {
+        startInquiry: () => request('POST', '/persona/inquiry'),
+        getStatus: () => request('GET', '/persona/inquiry/status'),
+    },
+    // ----- Vehicle -----
+    vehicle: {
+        startInquiry: () => request('POST', '/vehicle/inquiry'),
+        getStatus: () => request('GET', '/vehicle/inquiry/status'),
     },
 };

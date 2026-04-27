@@ -1,4 +1,4 @@
-import type { User, Ride, FareEstimate, WalletEntry, ComplianceProgress } from '../types'
+import type { User, Ride, FareEstimate, WalletEntry, ComplianceProgress, OnboardingProgress, PersonaInquiryResponse } from '../types'
 
 const BASE = '/api'
 
@@ -47,11 +47,9 @@ export interface WaPollResponse {
 // ----- Auth -----
 export const api = {
   auth: {
-    /** New primary auth: request a wa.me deep link */
     requestWaAuth: (phone: string, role: string = 'driver') =>
       request<WaAuthLinkResponse>('POST', '/auth/wa/request', { phone, role }, false),
 
-    /** Poll for token completion */
     pollWaAuth: (session_id: string) =>
       request<WaPollResponse>('GET', `/auth/wa/poll/${session_id}`, undefined, false),
 
@@ -90,5 +88,22 @@ export const api = {
   compliance: {
     progress: () => request<ComplianceProgress>('GET', '/driver/compliance/progress'),
     status: () => request<ComplianceProgress>('GET', '/driver/compliance'),
+  },
+
+  // ----- Onboarding -----
+  onboarding: {
+    progress: () => request<OnboardingProgress>('GET', '/compliance/progress'),
+  },
+
+  // ----- Persona KYC -----
+  persona: {
+    startInquiry: () => request<PersonaInquiryResponse>('POST', '/persona/inquiry'),
+    getStatus: () => request<PersonaInquiryResponse>('GET', '/persona/inquiry/status'),
+  },
+
+  // ----- Vehicle -----
+  vehicle: {
+    startInquiry: () => request<PersonaInquiryResponse>('POST', '/vehicle/inquiry'),
+    getStatus: () => request<{ persona_inquiry_id: string; status: string; hosted_flow_url: string | null } | null>('GET', '/vehicle/inquiry/status'),
   },
 }

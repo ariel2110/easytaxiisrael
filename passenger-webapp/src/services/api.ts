@@ -29,10 +29,8 @@ export interface WaPollResponse {
 
 export const api = {
   auth: {
-    /** New primary auth: request a wa.me deep link */
     requestWaAuth: (phone: string, role: string = 'passenger') =>
       request<WaAuthLinkResponse>('POST', '/auth/wa/request', { phone, role }, false),
-    /** Poll for token completion */
     pollWaAuth: (session_id: string) =>
       request<WaPollResponse>('GET', `/auth/wa/poll/${session_id}`, undefined, false),
     me: () => request<User>('GET', '/auth/me'),

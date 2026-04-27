@@ -77,3 +77,25 @@ export interface LocationPayload {
   lng: number
   timestamp: string
 }
+
+export type OnboardingStepId = 'identity_kyc' | 'vehicle_compliance' | 'compliance_docs' | 'rideshare_ack'
+export type OnboardingStepStatus = 'not_started' | 'pending' | 'approved' | 'declined' | 'rejected' | 'expired'
+
+export interface OnboardingStep {
+  id: OnboardingStepId
+  name: string
+  status: OnboardingStepStatus
+  required: boolean
+}
+
+export interface OnboardingProgress {
+  overall_pct: number
+  steps: OnboardingStep[]
+}
+
+export interface PersonaInquiryResponse {
+  inquiry_id: string
+  persona_inquiry_id: string
+  status: string
+  hosted_flow_url: string | null
+}
