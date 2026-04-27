@@ -52,6 +52,7 @@ def upgrade() -> None:
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("cancelled_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("fare_ils", sa.Float(), nullable=True),
     )
     op.create_index("ix_rides_passenger_id", "rides", ["passenger_id"])
     op.create_index("ix_rides_driver_id", "rides", ["driver_id"])

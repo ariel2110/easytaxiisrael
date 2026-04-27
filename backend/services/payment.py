@@ -177,6 +177,7 @@ async def process_payment(db: AsyncSession, ride_id: uuid.UUID) -> RidePayment:
 
         payment.status = PaymentStatus.completed
         payment.completed_at = _now()
+        ride.fare_ils = float(fare.total_amount)  # denorm for quick read
         payments_processed_total.labels(status="completed").inc()
         revenue_total.inc(int(fare.platform_fee * 100))
 
