@@ -29,7 +29,8 @@ import models.legal        # noqa: F401, E402
 import models.location     # noqa: F401, E402
 import models.payment      # noqa: F401, E402
 import models.ride         # noqa: F401, E402
-import models.user         # noqa: F401, E402
+import models.user              # noqa: F401, E402
+import models.kyc_application  # noqa: F401, E402
 from core.database import Base  # noqa: E402
 
 target_metadata = Base.metadata

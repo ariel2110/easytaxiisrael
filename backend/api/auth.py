@@ -124,10 +124,9 @@ async def poll_wa_auth(
             return WAAuthPollResponse(status="pending")
         return WAAuthPollResponse(status="expired")
 
-    # Completed — build KYC URL if driver
+    # Completed — guide driver to new KYC flow
     kyc_url: str | None = None
-    if result.get("role") == UserRole.driver.value and settings.PERSONA_API_KEY and settings.PERSONA_TEMPLATE_ID:
-        # Find user by looking up the token's subject
+    if result.get("role") == UserRole.driver.value:
         from core.security import decode_access_token
         try:
             payload = decode_access_token(result["access_token"])
@@ -135,17 +134,12 @@ async def poll_wa_auth(
             from sqlalchemy import select
             res = await db.execute(select(User).where(User.id == user_id))
             user = res.scalar_one_or_none()
-            if user:
-                try:
-                    inquiry = await persona_svc.create_inquiry(db, user.id)
-                    kyc_url = _build_inquiry_url(inquiry)
-                    # Track that Persona KYC has been initiated
-                    user.auth_status = AuthStatus.persona_in_progress
-                    await db.commit()
-                except Exception:
-                    pass
+            if user and user.auth_status == AuthStatus.pending:
+                user.auth_status = AuthStatus.persona_in_progress
+                await db.commit()
         except Exception:
             pass
+        kyc_url = "/kyc/application"
 
     return WAAuthPollResponse(
         status="completed",
@@ -218,14 +212,13 @@ async def verify_otp_and_login(
                 ip_address=request.client.host if request.client else None)
     await db.commit()
 
-    # ── Persona KYC: auto-create inquiry for drivers after phone verification ──
+    # ── KYC: guide driver to new dual-agent verification flow ──
     kyc_url: str | None = None
-    if user.role == UserRole.driver and settings.PERSONA_API_KEY and settings.PERSONA_TEMPLATE_ID:
-        try:
-            inquiry = await persona_svc.create_inquiry(db, user.id)
-            kyc_url = _build_inquiry_url(inquiry)
-        except Exception:  # noqa: BLE001 — KYC failure must not block login
-            pass
+    if user.role == UserRole.driver:
+        if user.auth_status == AuthStatus.pending:
+            user.auth_status = AuthStatus.persona_in_progress
+            await db.commit()
+        kyc_url = "/kyc/application"
 
     return TokenResponse(
         access_token=access,
