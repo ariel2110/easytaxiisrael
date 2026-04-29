@@ -1,4 +1,4 @@
-import type { AdminUser, DriverAdminRead, PlatformStats, AdminRide, AuditLog } from '../types'
+import type { AdminUser, DriverAdminRead, PlatformStats, AdminRide, AuditLog, AIAgent, AIChatResponse, AIKeyUpdateResponse } from '../types'
 
 const BASE = '/api'
 
@@ -50,5 +50,13 @@ export const api = {
   audit: {
     list: (skip = 0, limit = 100) =>
       req<AuditLog[]>('GET', `/admin/audit-logs?skip=${skip}&limit=${limit}`),
+  },
+  aiAgents: {
+    list: () => req<AIAgent[]>('GET', '/admin/ai-agents'),
+    chat: (agentId: string, message: string, model?: string) =>
+      req<AIChatResponse>('POST', `/admin/ai-agents/${agentId}/chat`, { message, model }),
+    updateKey: (agentId: string, api_key: string) =>
+      req<AIKeyUpdateResponse>('PUT', `/admin/ai-agents/${agentId}/key`, { api_key }),
+    disable: (agentId: string) => req<{ success: boolean }>('DELETE', `/admin/ai-agents/${agentId}/key`),
   },
 }

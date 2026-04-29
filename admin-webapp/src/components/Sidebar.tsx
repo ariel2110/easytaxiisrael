@@ -12,6 +12,7 @@ const NAV = [
   { to: '/admin/users',   label: 'משתמשים', icon: '👥', end: false },
   { to: '/admin/rides',   label: 'נסיעות',  icon: '🛣️', end: false },
   { to: '/admin/audit',   label: 'יומן',    icon: '📋', end: false },
+  { to: '/admin/ai-agents', label: 'סוכני AI', icon: '🤖', end: false },
 ]
 
 export default function Sidebar({ user, onLogout }: Props) {

@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.agents import router as agents_router
 from api.ai import router as ai_router
+from api.ai_agents import router as ai_agents_router
 from api.admin import router as admin_router
 from api.auth import router as auth_router
 from api.compliance import router as compliance_router
@@ -95,6 +96,7 @@ app.include_router(rides_router)
 app.include_router(tracking_router)
 app.include_router(payments_router)
 app.include_router(ai_router)
+app.include_router(ai_agents_router)
 app.include_router(compliance_router)
 app.include_router(legal_router)
 app.include_router(tos_router)

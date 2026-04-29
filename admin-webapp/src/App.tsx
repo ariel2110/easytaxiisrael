@@ -7,6 +7,7 @@ import Users from './pages/Users'
 import Drivers from './pages/Drivers'
 import Rides from './pages/Rides'
 import AuditLogs from './pages/AuditLogs'
+import AIAgents from './pages/AIAgents'
 
 function AdminLayout() {
   const { user, logout } = useAuth()
@@ -32,6 +33,7 @@ function AdminLayout() {
             <Route path="drivers" element={<Drivers />} />
             <Route path="rides" element={<Rides />} />
             <Route path="audit" element={<AuditLogs />} />
+            <Route path="ai-agents" element={<AIAgents />} />
             <Route path="*" element={<Navigate to="/admin/" replace />} />
           </Routes>
         </div>

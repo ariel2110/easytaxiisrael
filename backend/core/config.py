@@ -70,6 +70,8 @@ class Settings(BaseSettings):
     XAI_API_KEY: str | None = None
     # DeepSeek
     DEEPSEEK_API_KEY: str | None = None
+    # Kimi (Moonshot AI)
+    KIMI_API_KEY: str | None = None
     # Serper (Google Search API)
     SERPER_API_KEY: str | None = None
     # Google Maps Platform

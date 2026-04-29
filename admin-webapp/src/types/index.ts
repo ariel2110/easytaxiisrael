@@ -45,6 +45,28 @@ export interface AdminRide {
   completed_at: string | null
 }
 
+export interface AIAgent {
+  id: string
+  name: string
+  icon: string
+  enabled: boolean
+  key_masked: string
+  models: string[]
+  default_model: string
+}
+
+export interface AIChatResponse {
+  reply: string
+  model: string
+  agent_id: string
+}
+
+export interface AIKeyUpdateResponse {
+  success: boolean
+  agent_id: string
+  key_masked: string
+}
+
 export interface AuditLog {
   id: string
   actor_id: string | null
