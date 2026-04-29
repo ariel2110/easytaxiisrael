@@ -26,7 +26,7 @@ from models.audit import AuditAction, AuditLog
 from models.payment import DriverWallet, RidePayment
 from models.rating import Rating, RatingDirection
 from models.ride import Ride, RideStatus
-from models.user import User, UserRole
+from models.user import User, UserRole, AuthStatus, DriverType
 from security.audit import audit
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -41,7 +41,10 @@ class UserAdminRead(BaseModel):
     id: uuid.UUID
     phone: str
     role: str
+    driver_type: str | None = None
+    auth_status: str | None = None
     is_active: bool
+    full_name: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -158,6 +161,60 @@ async def deactivate_user(
     await audit(db, AuditAction.admin_evaluate_driver, actor_id=admin.id,
                 resource_type="user", resource_id=str(user_id),
                 detail="deactivated")
+    await db.commit()
+    await db.refresh(user)
+    return UserAdminRead.model_validate(user)
+
+
+@router.patch(
+    "/users/{user_id}/approve",
+    response_model=UserAdminRead,
+    summary="Approve a driver — set auth_status=approved",
+)
+async def approve_driver(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(_admin),
+) -> UserAdminRead:
+    user = await db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user.role != UserRole.driver:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User is not a driver")
+    user.auth_status = AuthStatus.approved
+    user.is_active = True
+    await audit(db, AuditAction.admin_evaluate_driver, actor_id=admin.id,
+                resource_type="user", resource_id=str(user_id),
+                detail="approved")
+    await db.commit()
+    await db.refresh(user)
+    return UserAdminRead.model_validate(user)
+
+
+class SetDriverTypeRequest(BaseModel):
+    driver_type: Literal["licensed_taxi", "rideshare"]
+
+
+@router.patch(
+    "/users/{user_id}/driver-type",
+    response_model=UserAdminRead,
+    summary="Set driver type (licensed_taxi / rideshare)",
+)
+async def set_driver_type(
+    user_id: uuid.UUID,
+    body: SetDriverTypeRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(_admin),
+) -> UserAdminRead:
+    user = await db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user.role != UserRole.driver:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User is not a driver")
+    user.driver_type = DriverType(body.driver_type)
+    await audit(db, AuditAction.admin_evaluate_driver, actor_id=admin.id,
+                resource_type="user", resource_id=str(user_id),
+                detail=f"driver_type set to {body.driver_type}")
     await db.commit()
     await db.refresh(user)
     return UserAdminRead.model_validate(user)

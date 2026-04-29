@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="100" fill="#070B14"/>
+
+  <!-- Car body -->
+  <rect x="62" y="246" width="388" height="144" rx="36" fill="#2563EB"/>
+
+  <!-- Taxi yellow stripe -->
+  <rect x="64" y="295" width="384" height="46" fill="#FDE047"/>
+
+  <!-- Cabin / roof -->
+  <rect x="134" y="154" width="244" height="114" rx="30" fill="#2563EB"/>
+
+  <!-- Windshield -->
+  <rect x="152" y="168" width="208" height="90" rx="20" fill="#93C5FD" opacity="0.9"/>
+
+  <!-- Left wheel -->
+  <circle cx="142" cy="390" r="46" fill="#0D1526"/>
+  <circle cx="142" cy="390" r="22" fill="#60A5FA"/>
+
+  <!-- Right wheel -->
+  <circle cx="370" cy="390" r="46" fill="#0D1526"/>
+  <circle cx="370" cy="390" r="22" fill="#60A5FA"/>
+
+  <!-- Left headlight -->
+  <ellipse cx="86" cy="308" rx="20" ry="13" fill="#FDE047" opacity="0.9"/>
+
+  <!-- Right headlight -->
+  <ellipse cx="426" cy="308" rx="20" ry="13" fill="#FDE047" opacity="0.9"/>
+
+  <!-- Top accent dot -->
+  <circle cx="256" cy="110" r="20" fill="#60A5FA"/>
+</svg>

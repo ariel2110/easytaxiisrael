@@ -29,6 +29,7 @@ export const api = {
         logout: () => request('POST', '/auth/logout', {
             refresh_token: localStorage.getItem('refresh_token') ?? '',
         }),
+        updateProfile: (data) => request('PATCH', '/auth/profile', data),
     },
     // ----- Rides -----
     rides: {

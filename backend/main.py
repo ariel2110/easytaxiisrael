@@ -48,6 +48,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    # Auto-configure Evolution API webhook on startup
+    try:
+        from services import whatsapp as _wa
+        _correct_url = "https://easytaxiisrael.com/api/whatsapp/webhook"
+        await _wa.set_webhook(_correct_url)
+    except Exception:
+        pass  # Non-fatal — admin can fix via /api/whatsapp/fix-webhook
+
     yield
     # Shutdown
     await engine.dispose()

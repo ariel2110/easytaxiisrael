@@ -3,6 +3,9 @@ export interface User {
   phone: string
   role: 'driver' | 'passenger' | 'admin'
   is_active: boolean
+  auth_status: 'pending' | 'whatsapp_verified' | 'persona_in_progress' | 'persona_completed' | 'approved'
+  full_name: string | null
+  email: string | null
 }
 
 export interface TokenPair {

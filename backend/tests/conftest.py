@@ -21,6 +21,7 @@ os.environ.update(
         "EVOLUTION_INSTANCE": "test-instance",
         "ADMIN_USERNAME": "972500000000",
         "ADMIN_PASSWORD": "test-admin-password",
+        "WHATSAPP_PLATFORM_PHONE": "972546363350",
     }
 )
 
@@ -42,6 +43,7 @@ from models.user import User, UserRole
 # Import ALL models so they register with Base.metadata before create_all
 import models.audit       # noqa: F401
 import models.compliance  # noqa: F401
+import models.driver_verified_data  # noqa: F401
 import models.growth      # noqa: F401
 import models.legal       # noqa: F401
 import models.location    # noqa: F401
@@ -100,7 +102,8 @@ async def client(fake_redis):
 
     app.dependency_overrides[get_db] = _override_get_db
 
-    with patch("core.security.redis_client", fake_redis):
+    with patch("core.security.redis_client", fake_redis), \
+         patch("api.auth._redis_client", fake_redis):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:

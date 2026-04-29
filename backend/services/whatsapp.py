@@ -136,7 +136,7 @@ async def get_qrcode() -> dict | None:
             instances = r.json()
             for inst in (instances if isinstance(instances, list) else [instances]):
                 if inst.get("instance", {}).get("instanceName") == _INST:
-                    state = inst.get("instance", {}).get("connectionStatus", "")
+                    state = inst.get("instance", {}).get("status") or inst.get("instance", {}).get("connectionStatus", "")
                     if state == "open":
                         return {"connected": True, "state": state}
                     # fetch QR
@@ -167,3 +167,63 @@ async def get_connection_state() -> str:
     except Exception:
         pass
     return "unknown"
+
+
+async def get_instance_info() -> dict | None:
+    """Returns the instance info dict (owner, status, webhook, etc.) or None."""
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(f"{_BASE}/instance/fetchInstances", headers=_HDRS)
+            if r.status_code != 200:
+                return None
+            instances = r.json()
+            for item in (instances if isinstance(instances, list) else [instances]):
+                if item.get("instance", {}).get("instanceName") == _INST:
+                    return item.get("instance", {})
+    except Exception as exc:
+        logger.warning("get_instance_info failed: %s", exc)
+    return None
+
+
+async def logout_instance() -> bool:
+    """Logout current WhatsApp session (keeps instance config, disconnects session)."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.delete(f"{_BASE}/instance/logout/{_INST}", headers=_HDRS)
+            logger.info("logout_instance → %s %s", r.status_code, r.text[:200])
+            return r.status_code in (200, 201, 400)  # 400 = already disconnected
+    except Exception as exc:
+        logger.warning("logout_instance failed: %s", exc)
+        return False
+
+
+async def get_webhook_url() -> str | None:
+    """Fetch the currently configured webhook URL from Evolution API."""
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(f"{_BASE}/webhook/find/{_INST}", headers=_HDRS)
+            if r.status_code == 200:
+                return (r.json() or {}).get("url") or None
+    except Exception as exc:
+        logger.warning("get_webhook_url failed: %s", exc)
+    return None
+
+
+async def set_webhook(url: str) -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(
+                f"{_BASE}/webhook/set/{_INST}",
+                json={
+                    "url": url,
+                    "webhook_by_events": False,
+                    "webhook_base64": False,
+                    "events": ["MESSAGES_UPSERT", "CONNECTION_UPDATE"],
+                },
+                headers=_HDRS,
+            )
+            logger.info("set_webhook → %s %s", r.status_code, r.text[:200])
+            return r.status_code in (200, 201)
+    except Exception as exc:
+        logger.warning("set_webhook failed: %s", exc)
+        return False

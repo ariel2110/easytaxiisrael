@@ -1,10 +1,64 @@
 <!doctype html>
-<html lang="en">
+<html lang="he" dir="rtl">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0f172a" />
-    <title>RideOS — Book a Ride</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+
+    <!-- ── Favicon / Icons ──────────────────────────────────────── -->
+    <!-- SVG vector icon — scales perfectly, no quality loss -->
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <!-- ICO fallback for older browsers / Windows -->
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <!-- Retina / HiDPI desktop -->
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="icon" href="/favicon-16.png" sizes="16x16" type="image/png" />
+    <!-- Apple Touch Icon (iPhone / iPad home screen) -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/icon-152.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <!-- Android / Chrome / PWA manifest -->
+    <link rel="manifest" href="/site.webmanifest" />
+    <!-- Windows tile (IE11 / Edge legacy) -->
+    <meta name="msapplication-TileImage" content="/icon-144.png" />
+    <meta name="msapplication-TileColor" content="#070B14" />
+    <meta name="msapplication-config" content="none" />
+
+    <!-- ── PWA / Theme ──────────────────────────────────────────── -->
+    <meta name="theme-color" content="#2563EB" />
+    <meta name="application-name" content="EasyTaxi ישראל" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="EasyTaxi" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- ── SEO ──────────────────────────────────────────────────── -->
+    <meta name="description" content="הזמן מונית בישראל — מהיר, בטוח, שקוף. כל הנהגים מאומתים. AI מוצא לך נהג תוך שניות." />
+    <meta name="keywords" content="מונית, הסעות, טקסי, EasyTaxi, ישראל, נסיעה, נהג" />
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="EasyTaxi Israel" />
+
+    <!-- ── Open Graph (Facebook / WhatsApp preview) ─────────────── -->
+    <meta property="og:title" content="EasyTaxi ישראל — הזמן מונית עכשיו" />
+    <meta property="og:description" content="פלטפורמת הסעות חכמה לנוסעים ונהגים. AI מוצא נהג תוך שניות. מחיר שקוף לפני הנסיעה." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://easytaxiisrael.com" />
+    <meta property="og:image" content="https://easytaxiisrael.com/icon-512.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:locale" content="he_IL" />
+    <meta property="og:site_name" content="EasyTaxi ישראל" />
+
+    <!-- ── Twitter Card ─────────────────────────────────────────── -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="EasyTaxi ישראל — הזמן מונית עכשיו" />
+    <meta name="twitter:description" content="AI מוצא לך נהג תוך שניות. מחיר שקוף לפני הנסיעה." />
+    <meta name="twitter:image" content="https://easytaxiisrael.com/icon-512.png" />
+
+    <!-- ── Preconnect for Heebo font ────────────────────────────── -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <title>EasyTaxi ישראל — הזמן מונית עכשיו</title>
   </head>
   <body>
     <div id="root"></div>
@@ -12,4 +66,3 @@
   </body>
 </html>
 
-</html>

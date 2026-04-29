@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EasyTaxi — חיבור WhatsApp</title>
+  <style>
+    :root {
+      --yellow: #FFD700;
+      --yellow-dark: #E6C200;
+      --black: #1A1A1A;
+      --gray: #2C2C2C;
+      --gray-light: #3A3A3A;
+      --text: #F5F5F5;
+      --text-muted: #999;
+      --green: #22C55E;
+      --red: #EF4444;
+      --orange: #F97316;
+      --radius: 12px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--black);
+      color: var(--text);
+      font-family: 'Segoe UI', 'Heebo', Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 60px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    header .logo { font-size: 2rem; margin-bottom: 8px; }
+    header h1 { font-size: 1.5rem; color: var(--yellow); font-weight: 700; }
+    header p { color: var(--text-muted); font-size: 0.9rem; margin-top: 4px; }
+
+    .card {
+      background: var(--gray);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      width: 100%;
+      max-width: 480px;
+      margin-bottom: 16px;
+      border: 1px solid #444;
+    }
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--yellow);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Auth card */
+    .input-row {
+      display: flex;
+      gap: 8px;
+    }
+    input[type="text"], input[type="password"] {
+      flex: 1;
+      background: var(--gray-light);
+      border: 1px solid #555;
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.9rem;
+      padding: 10px 14px;
+      outline: none;
+      direction: ltr;
+    }
+    input:focus { border-color: var(--yellow); }
+
+    /* Status indicator */
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1rem;
+      margin-bottom: 10px;
+    }
+    .dot {
+      width: 14px; height: 14px; border-radius: 50%;
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .dot.open    { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .dot.close   { background: var(--red); }
+    .dot.connecting { background: var(--orange); animation: pulse 1s infinite; }
+    .dot.unknown { background: #666; }
+
+    @keyframes pulse {
+      0%,100% { opacity: 1; } 50% { opacity: 0.4; }
+    }
+
+    .info-grid {
+      display: grid;
+      gap: 8px;
+    }
+    .info-item {
+      background: var(--gray-light);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.85rem;
+    }
+    .info-item label {
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      display: block;
+      margin-bottom: 3px;
+    }
+    .info-item span { color: var(--text); word-break: break-all; direction: ltr; }
+    .info-item.warn span { color: var(--orange); }
+    .info-item.ok span { color: var(--green); }
+
+    /* QR code */
+    #qr-container {
+      text-align: center;
+      padding: 12px 0;
+    }
+    #qr-img {
+      width: 240px; height: 240px;
+      border-radius: 12px;
+      border: 3px solid var(--yellow);
+      background: white;
+      display: none;
+    }
+    .qr-instructions {
+      margin-top: 12px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 10px 18px;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-yellow { background: var(--yellow); color: var(--black); }
+    .btn-yellow:hover { background: var(--yellow-dark); }
+    .btn-red    { background: var(--red);    color: white; }
+    .btn-red:hover { opacity: 0.85; }
+    .btn-outline { background: transparent; color: var(--text); border: 1px solid #555; }
+    .btn-outline:hover { border-color: var(--yellow); color: var(--yellow); }
+    .btn-green  { background: var(--green);  color: var(--black); }
+    .btn-full { width: 100%; }
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    /* Test send */
+    .test-row { display: flex; gap: 8px; margin-top: 10px; }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 24px; left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--gray-light);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 12px 20px;
+      font-size: 0.9rem;
+      border: 1px solid #555;
+      transition: transform 0.3s ease;
+      max-width: 90vw;
+      text-align: center;
+      z-index: 999;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+    #toast.success { border-color: var(--green); }
+    #toast.error   { border-color: var(--red); }
+
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .section-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🚕</div>
+  <h1>חיבור WhatsApp</h1>
+  <p>EasyTaxi — לוח ניהול</p>
+</header>
+
+<!-- Auth card -->
+<div class="card" id="auth-card">
+  <h2>🔑 מפתח ניהול</h2>
+  <div class="input-row">
+    <input type="password" id="admin-key" placeholder="הכנס Evolution API key..." autocomplete="off" />
+    <button class="btn btn-yellow" onclick="loadStatus()">התחבר</button>
+  </div>
+  <p style="margin-top:8px; font-size:0.8rem; color:var(--text-muted)">
+    המפתח נמצא ב: <code style="color:var(--yellow)">.env → EVOLUTION_API_KEY</code>
+  </p>
+</div>
+
+<!-- Status card -->
+<div class="card" id="status-card" style="display:none">
+  <h2>📶 סטטוס חיבור</h2>
+  <div class="status-row">
+    <div class="dot unknown" id="state-dot"></div>
+    <span id="state-label">טוען...</span>
+    <button class="btn btn-outline" style="margin-right:auto; padding:6px 12px; font-size:0.8rem"
+            onclick="loadStatus()">רענן</button>
+  </div>
+  <div class="info-grid" id="info-grid"></div>
+</div>
+
+<!-- QR code card -->
+<div class="card" id="qr-card" style="display:none">
+  <h2>📱 QR קוד לחיבור</h2>
+  <div id="qr-container">
+    <img id="qr-img" alt="QR Code" />
+    <p id="qr-placeholder" style="color:var(--text-muted); padding:40px 0">
+      לחץ על "חיבור מחדש" כדי לקבל QR קוד
+    </p>
+  </div>
+  <div class="qr-instructions" id="qr-instructions" style="display:none">
+    1. פתח WhatsApp בטלפון שלך<br>
+    2. לחץ על ⋮ ← "מכשירים מקושרים"<br>
+    3. לחץ "קשר מכשיר" וסרוק את הקוד
+  </div>
+  <div class="btn-row" style="margin-top:14px">
+    <button class="btn btn-yellow" onclick="doReconnect()" id="reconnect-btn">
+      🔄 התנתק וחבר מחדש
+    </button>
+    <button class="btn btn-outline" onclick="refreshQr()" id="refresh-qr-btn">
+      רענן QR
+    </button>
+  </div>
+</div>
+
+<!-- Actions card -->
+<div class="card" id="actions-card" style="display:none">
+  <h2>⚙️ פעולות</h2>
+
+  <!-- ── Platform phone ── -->
+  <p class="section-title">📱 מספר וואטסאפ של הפלטפורמה</p>
+  <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:8px; line-height:1.5">
+    זהו המספר שאליו נשלחות הודעות האימות. חייב להתאים למספר המחובר למעלה.
+  </p>
+  <div id="phone-mismatch-alert" style="display:none; background:rgba(249,115,22,0.15); border:1px solid var(--orange); border-radius:8px; padding:10px 14px; font-size:0.85rem; color:var(--orange); margin-bottom:10px">
+    ⚠️ <strong>אי-התאמה!</strong> מספר הפלטפורמה שונה ממספר המחובר. לחץ "סנכרן אוטומטית" לתיקון.
+  </div>
+  <div class="test-row">
+    <input type="text" id="platform-phone-input" placeholder="447474775344" dir="ltr" />
+    <button class="btn btn-yellow" onclick="doUpdatePhone()" id="update-phone-btn">עדכן</button>
+  </div>
+  <button class="btn btn-outline btn-full" onclick="doSyncPhone()" id="sync-phone-btn"
+          style="margin-top:8px; font-size:0.82rem">
+    🔄 סנכרן אוטומטית עם המספר המחובר
+  </button>
+
+  <hr style="border-color:#444; margin:16px 0" />
+
+  <p class="section-title">תיקון Webhook</p>
+  <button class="btn btn-outline btn-full" onclick="doFixWebhook()" id="fix-webhook-btn">
+    🔧 עדכן כתובת Webhook ב-Evolution API
+  </button>
+  <p style="font-size:0.8rem; color:var(--text-muted); margin-top:6px">
+    מעדכן ל: <code style="color:var(--yellow); direction:ltr; display:inline-block">/api/whatsapp/webhook</code>
+  </p>
+
+  <hr style="border-color:#444; margin:16px 0" />
+
+  <p class="section-title">שלח הודעת בדיקה</p>
+  <div class="test-row">
+    <input type="text" id="test-phone" placeholder="972501234567" />
+    <button class="btn btn-green" onclick="doTestSend()">שלח</button>
+  </div>
+</div>
+
+<!-- Notice card — shown after successful reconnect -->
+<div class="card" id="notice-card" style="display:none; border-color:var(--yellow)">
+  <h2>📌 הוראות לאחר חיבור</h2>
+  <p style="font-size:0.9rem; line-height:1.6; color:var(--text-muted)">
+    לאחר חיבור WhatsApp שלך, עדכן את קובץ <code style="color:var(--yellow)">.env</code>:
+  </p>
+  <div class="info-item" style="margin-top:10px; direction:ltr; font-family:monospace; font-size:0.85rem">
+    <label>הוסף/עדכן בשורה</label>
+    <span id="env-hint">WHATSAPP_PLATFORM_PHONE=972XXXXXXXXX</span>
+  </div>
+  <p style="font-size:0.8rem; color:var(--text-muted); margin-top:8px">
+    ואז הפעל מחדש: <code style="color:var(--yellow)">docker compose restart backend worker</code>
+  </p>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  const API_BASE = '/api/whatsapp';
+  let adminKey = '';
+  let pollInterval = null;
+  let isPolling = false;
+
+  // Try to load key from URL param
+  (() => {
+    const p = new URLSearchParams(location.search);
+    if (p.get('key')) {
+      document.getElementById('admin-key').value = p.get('key');
+      adminKey = p.get('key');
+      setTimeout(loadStatus, 300);
+    }
+  })();
+
+  function headers() {
+    return { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey };
+  }
+
+  function showToast(msg, type = '') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'show ' + type;
+    setTimeout(() => { t.className = ''; }, 3500);
+  }
+
+  async function loadStatus() {
+    const keyInput = document.getElementById('admin-key').value.trim();
+    if (keyInput) adminKey = keyInput;
+    if (!adminKey) { showToast('הכנס מפתח ניהול תחילה', 'error'); return; }
+
+    try {
+      const res = await fetch(`${API_BASE}/status`, { headers: headers() });
+      if (res.status === 403) { showToast('מפתח שגוי', 'error'); return; }
+      const data = await res.json();
+      renderStatus(data);
+      document.getElementById('auth-card').style.display = 'none';
+      document.getElementById('status-card').style.display = '';
+      document.getElementById('qr-card').style.display = '';
+      document.getElementById('actions-card').style.display = '';
+      document.getElementById('notice-card').style.display = '';
+    } catch (e) {
+      showToast('שגיאה בטעינת סטטוס: ' + e.message, 'error');
+    }
+  }
+
+  function renderStatus(data) {
+    const dot = document.getElementById('state-dot');
+    const label = document.getElementById('state-label');
+    const state = data.state || 'unknown';
+
+    dot.className = 'dot ' + state;
+    const stateMap = { open: '🟢 מחובר', connecting: '🟡 מתחבר...', close: '🔴 מנותק', unknown: '⚫ לא ידוע' };
+    label.textContent = stateMap[state] || state;
+
+    const grid = document.getElementById('info-grid');
+    const rows = [
+      { label: 'מספר מחובר', val: data.owner_phone || '—', cls: data.owner_phone ? '' : 'warn' },
+      { label: 'שם פרופיל', val: data.profile_name || '—', cls: '' },
+      { label: 'מספר פלטפורמה (קונפיג)', val: data.platform_phone || '—',
+        cls: data.owner_phone && data.platform_phone !== data.owner_phone ? 'warn' : 'ok' },
+      { label: 'מקור ההגדרה', val: data.platform_phone_source === 'redis' ? '✅ Redis (עדכני)' : '⚙️ ברירת מחדל (settings)', cls: data.platform_phone_source === 'redis' ? 'ok' : 'warn' },
+      { label: 'Webhook מוגדר', val: data.configured_webhook || '—',
+        cls: data.configured_webhook === data.correct_webhook ? 'ok' : 'warn' },
+      { label: 'Webhook נכון', val: data.correct_webhook, cls: 'ok' },
+    ];
+
+    grid.innerHTML = rows.map(r => `
+      <div class="info-item ${r.cls}">
+        <label>${r.label}</label>
+        <span>${r.val}</span>
+      </div>
+    `).join('');
+
+    // Populate phone input with current platform phone
+    const phoneInput = document.getElementById('platform-phone-input');
+    if (phoneInput && data.platform_phone) phoneInput.value = data.platform_phone;
+
+    // Show mismatch alert if owner ≠ platform
+    const mismatch = document.getElementById('phone-mismatch-alert');
+    if (mismatch) {
+      const hasMismatch = data.owner_phone && data.platform_phone && data.owner_phone !== data.platform_phone;
+      mismatch.style.display = hasMismatch ? 'block' : 'none';
+    }
+
+    // Update env hint
+    if (data.owner_phone) {
+      document.getElementById('env-hint').textContent =
+        `WHATSAPP_PLATFORM_PHONE=${data.owner_phone}`;
+    }
+
+    // If connected, hide QR. If not, keep it visible.
+    if (state === 'open') {
+      stopPoll();
+      document.getElementById('qr-img').style.display = 'none';
+      document.getElementById('qr-placeholder').style.display = 'block';
+      document.getElementById('qr-placeholder').textContent = '✅ מחובר!';
+      document.getElementById('qr-instructions').style.display = 'none';
+    }
+  }
+
+  async function refreshQr() {
+    try {
+      const res = await fetch(`${API_BASE}/qr`, { headers: headers() });
+      const data = await res.json();
+      showQr(data);
+    } catch (e) {
+      showToast('שגיאה בטעינת QR: ' + e.message, 'error');
+    }
+  }
+
+  function showQr(data) {
+    const img = document.getElementById('qr-img');
+    const placeholder = document.getElementById('qr-placeholder');
+    const instructions = document.getElementById('qr-instructions');
+
+    if (data.connected) {
+      img.style.display = 'none';
+      placeholder.style.display = 'block';
+      placeholder.textContent = '✅ מחובר!';
+      instructions.style.display = 'none';
+      stopPoll();
+      loadStatus();
+      return;
+    }
+    if (data.base64) {
+      img.src = data.base64.startsWith('data:') ? data.base64 : `data:image/png;base64,${data.base64}`;
+      img.style.display = 'block';
+      placeholder.style.display = 'none';
+      instructions.style.display = 'block';
+      startPoll();
+    } else {
+      placeholder.textContent = 'QR לא זמין כרגע — נסה שוב';
+      placeholder.style.display = 'block';
+      img.style.display = 'none';
+    }
+  }
+
+  async function doReconnect() {
+    const btn = document.getElementById('reconnect-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> מתנתק...';
+    try {
+      const res = await fetch(`${API_BASE}/reconnect`, {
+        method: 'POST', headers: headers()
+      });
+      const data = await res.json();
+      showToast('בקשת חיבור מחדש נשלחה!', 'success');
+      if (data.qr) showQr(data.qr);
+      else await refreshQr();
+    } catch (e) {
+      showToast('שגיאה: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '🔄 התנתק וחבר מחדש';
+    }
+  }
+
+  async function doFixWebhook() {
+    const btn = document.getElementById('fix-webhook-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> מעדכן...';
+    try {
+      const res = await fetch(`${API_BASE}/fix-webhook`, {
+        method: 'POST', headers: headers()
+      });
+      const data = await res.json();
+      if (data.status === 'ok') {
+        showToast('✅ Webhook עודכן בהצלחה!', 'success');
+        setTimeout(loadStatus, 800);
+      } else {
+        showToast('שגיאה בעדכון Webhook', 'error');
+      }
+    } catch (e) {
+      showToast('שגיאה: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '🔧 עדכן כתובת Webhook ב-Evolution API';
+    }
+  }
+
+  async function doTestSend() {
+    const phone = document.getElementById('test-phone').value.trim();
+    if (!phone) { showToast('הכנס מספר טלפון', 'error'); return; }
+    try {
+      const res = await fetch(`${API_BASE}/test-send`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ phone })
+      });
+      const data = await res.json();
+      if (data.success) showToast('✅ הודעת בדיקה נשלחה!', 'success');
+      else showToast('❌ שליחה נכשלה — בדוק שה-WhatsApp מחובר', 'error');
+    } catch (e) {
+      showToast('שגיאה: ' + e.message, 'error');
+    }
+  }
+
+  async function doUpdatePhone() {
+    const phone = document.getElementById('platform-phone-input').value.trim();
+    if (!phone) { showToast('הכנס מספר טלפון', 'error'); return; }
+    const btn = document.getElementById('update-phone-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+    try {
+      const res = await fetch(`${API_BASE}/update-phone`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ phone })
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        showToast('שגיאה: ' + (e.detail || res.statusText), 'error');
+        return;
+      }
+      const data = await res.json();
+      showToast(`✅ מספר הפלטפורמה עודכן ל-${data.platform_phone}`, 'success');
+      setTimeout(loadStatus, 600);
+    } catch (e) {
+      showToast('שגיאה: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = 'עדכן';
+    }
+  }
+
+  async function doSyncPhone() {
+    // Read owner_phone from last status and sync it as platform_phone
+    const ownerEl = document.querySelector('#info-grid .info-item:first-child span');
+    const ownerPhone = ownerEl ? ownerEl.textContent.trim() : '';
+    if (!ownerPhone || ownerPhone === '—') {
+      showToast('אין מספר מחובר — חבר WhatsApp תחילה', 'error');
+      return;
+    }
+    document.getElementById('platform-phone-input').value = ownerPhone;
+    await doUpdatePhone();
+  }
+
+  function startPoll() {
+    if (isPolling) return;
+    isPolling = true;
+    pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/status`, { headers: headers() });
+        const data = await res.json();
+        if (data.state === 'open') {
+          renderStatus(data);
+          showToast('🎉 WhatsApp מחובר בהצלחה!', 'success');
+          stopPoll();
+        }
+      } catch (_) {}
+    }, 4000);
+  }
+
+  function stopPoll() {
+    if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+    isPolling = false;
+  }
+</script>
+</body>
+</html>

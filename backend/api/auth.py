@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.config import settings
 from core.database import get_db
 from core.dependencies import get_current_user
+from core.redis import redis_client as _redis_client
 from core.security import (
     WA_AUTH_MESSAGE_PREFIX,
     WA_AUTH_TTL_SECONDS,
@@ -20,11 +21,12 @@ from core.security import (
     wa_session_is_pending,
 )
 from models.audit import AuditAction
-from models.user import User, UserRole
+from models.user import User, UserRole, AuthStatus
 from schemas.auth import (
     AdminLoginRequest,
     OTPRequest,
     OTPVerify,
+    ProfileUpdate,
     RefreshRequest,
     TokenResponse,
     UserRead,
@@ -46,6 +48,17 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def _build_kyc_url(user: User) -> str | None:
     """Shared helper — build Persona KYC URL for a driver."""
     return None  # will be populated below if settings are present
+
+
+def _build_inquiry_url(inquiry) -> str | None:
+    """Build Persona hosted-flow URL including session-token when available."""
+    if not inquiry.session_token:
+        return f"https://withpersona.com/verify?inquiry-id={inquiry.persona_inquiry_id}"
+    return (
+        f"https://withpersona.com/verify"
+        f"?inquiry-id={inquiry.persona_inquiry_id}"
+        f"&session-token={inquiry.session_token}"
+    )
 
 
 @router.post(
@@ -75,7 +88,9 @@ async def request_wa_auth(body: WAAuthRequest) -> WAAuthLinkResponse:
     # wa.me deep link that pre-populates the message
     import urllib.parse
     encoded_text = urllib.parse.quote(auth_message)
-    platform_number = settings.WHATSAPP_PLATFORM_PHONE
+    # Redis override takes priority — allows live phone update without backend restart
+    _phone_override = await _redis_client.get("whatsapp:platform_phone")
+    platform_number = _phone_override if _phone_override else settings.WHATSAPP_PLATFORM_PHONE
     whatsapp_link = f"https://wa.me/{platform_number}?text={encoded_text}"
 
     return WAAuthLinkResponse(
@@ -123,12 +138,10 @@ async def poll_wa_auth(
             if user:
                 try:
                     inquiry = await persona_svc.create_inquiry(db, user.id)
-                    if inquiry.session_token:
-                        kyc_url = (
-                            f"https://withpersona.com/verify"
-                            f"?inquiry-id={inquiry.persona_inquiry_id}"
-                            f"&session-token={inquiry.session_token}"
-                        )
+                    kyc_url = _build_inquiry_url(inquiry)
+                    # Track that Persona KYC has been initiated
+                    user.auth_status = AuthStatus.persona_in_progress
+                    await db.commit()
                 except Exception:
                     pass
         except Exception:
@@ -144,12 +157,12 @@ async def poll_wa_auth(
 
 
 # ---------------------------------------------------------------------------
-# Legacy OTP flow (kept for backward compatibility / admin tooling)
+# OTP flow (system sends code TO user's WhatsApp — primary login method)
 # ---------------------------------------------------------------------------
 
 @router.post(
     "/otp/request",
-    summary="[Legacy] Request a one-time password via WhatsApp",
+    summary="Send a one-time password to user's WhatsApp",
     status_code=status.HTTP_200_OK,
 )
 async def request_otp(body: OTPRequest, request: Request, db: AsyncSession = Depends(get_db)) -> dict:
@@ -210,12 +223,7 @@ async def verify_otp_and_login(
     if user.role == UserRole.driver and settings.PERSONA_API_KEY and settings.PERSONA_TEMPLATE_ID:
         try:
             inquiry = await persona_svc.create_inquiry(db, user.id)
-            if inquiry.session_token:
-                kyc_url = (
-                    f"https://withpersona.com/verify"
-                    f"?inquiry-id={inquiry.persona_inquiry_id}"
-                    f"&session-token={inquiry.session_token}"
-                )
+            kyc_url = _build_inquiry_url(inquiry)
         except Exception:  # noqa: BLE001 — KYC failure must not block login
             pass
 
@@ -267,6 +275,33 @@ async def admin_login(
     return TokenResponse(access_token=access, refresh_token=refresh, role=user.role.value)
 
 
+@router.get(
+    "/driver/kyc-status",
+    summary="Poll driver KYC status from Persona",
+)
+async def driver_kyc_status(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """
+    Returns the latest Persona inquiry status for the authenticated driver.
+    Frontend polls this every ~10 seconds from DriverPending.tsx.
+    """
+    if current_user.role != UserRole.driver:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Drivers only")
+
+    inquiry = await persona_svc.get_latest_inquiry(db, current_user.id)
+    if inquiry is None:
+        return {"kyc_status": "not_started", "inquiry_id": None, "auth_status": current_user.auth_status.value}
+
+    return {
+        "kyc_status": inquiry.status.value,
+        "inquiry_id": inquiry.persona_inquiry_id,
+        "kyc_url": _build_inquiry_url(inquiry),
+        "auth_status": current_user.auth_status.value,
+    }
+
+
 @router.post(
     "/logout",
     summary="Revoke refresh token (logout)",
@@ -305,3 +340,22 @@ async def update_device_token(
         )
     current_user.device_token = token
     await db.commit()
+
+
+@router.patch(
+    "/profile",
+    response_model=UserRead,
+    summary="עדכון פרטי פרופיל (שם + אימייל) — נדרש לאחר ההרשמה הראשונה",
+)
+async def update_profile(
+    body: ProfileUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if body.full_name is not None:
+        current_user.full_name = body.full_name.strip()
+    if body.email is not None:
+        current_user.email = body.email.lower().strip()
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user

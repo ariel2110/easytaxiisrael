@@ -2,7 +2,10 @@ export interface User {
   id: string
   phone: string
   role: 'driver' | 'passenger' | 'admin'
+  driver_type: 'licensed_taxi' | 'rideshare' | null
   is_active: boolean
+  auth_status: 'pending' | 'whatsapp_verified' | 'persona_in_progress' | 'persona_completed' | 'approved'
+  full_name: string | null
 }
 
 export interface TokenPair {

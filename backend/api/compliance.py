@@ -1,6 +1,11 @@
+import os
 import uuid
+from datetime import date
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +21,72 @@ from schemas.compliance import (
 )
 from services import compliance as compliance_service
 
+UPLOADS_DIR = Path(os.environ.get("UPLOADS_DIR", "/app/uploads/docs"))
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+_ALLOWED_MIME = {
+    "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif",
+    "application/pdf",
+}
+_MAX_SIZE = 10 * 1024 * 1024  # 10 MB
+
 router = APIRouter(prefix="/compliance", tags=["compliance"])
+
+
+# ---------------------------------------------------------------------------
+# File upload / serving
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/upload",
+    summary="Upload a document file (driver or admin)",
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_file(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """
+    Multipart file upload. Returns a `file_key` to use when submitting a document record.
+    Accepted: JPEG, PNG, WEBP, HEIC/HEIF, PDF — max 10 MB.
+    """
+    if file.content_type not in _ALLOWED_MIME:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"Unsupported file type: {file.content_type}. Allowed: JPEG, PNG, WEBP, HEIC, PDF",
+        )
+    content = await file.read()
+    if len(content) > _MAX_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File too large. Maximum size is 10 MB.",
+        )
+    ext = Path(file.filename or "file").suffix.lower() or ".bin"
+    file_key = f"{uuid.uuid4().hex}{ext}"
+    dest = UPLOADS_DIR / file_key
+    dest.write_bytes(content)
+    return {"file_key": file_key, "filename": file.filename, "size": len(content)}
+
+
+@router.get(
+    "/files/{file_key}",
+    summary="Serve an uploaded document file",
+)
+async def serve_file(
+    file_key: str,
+    current_user: User = Depends(get_current_user),
+) -> FileResponse:
+    """
+    Serve an uploaded file. Drivers can only fetch their own docs;
+    admins can fetch any doc.
+    """
+    # Basic path-traversal guard
+    if "/" in file_key or "\\" in file_key or ".." in file_key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file key")
+    path = UPLOADS_DIR / file_key
+    if not path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    return FileResponse(str(path))
 
 
 # ---------------------------------------------------------------------------
@@ -233,3 +303,175 @@ async def run_expiry_sweep(
     _: User = Depends(require_roles(UserRole.admin)),
 ) -> list[ComplianceEvaluationResult]:
     return await compliance_service.run_expiry_sweep(db)
+
+
+# ---------------------------------------------------------------------------
+# Background check (אישור יושרה) — manual upload, admin review
+# ---------------------------------------------------------------------------
+
+class BackgroundCheckSubmit(BaseModel):
+    """Driver submits their criminal-background clearance certificate."""
+    file_key: str = Field(..., description="S3 / storage key of the uploaded PDF")
+    expiry_date: date = Field(..., description="תוקף האישור (YYYY-MM-DD)")
+
+
+@router.post(
+    "/documents/background-check",
+    status_code=status.HTTP_201_CREATED,
+    summary="Submit criminal background clearance certificate (driver)",
+)
+async def submit_background_check(
+    payload: BackgroundCheckSubmit,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.driver)),
+) -> dict:
+    """
+    Driver uploads their 'אישור יושרה' (police clearance certificate).
+    Stored as a DriverDocument with type=background_check and put in pending state.
+    Admin must manually approve it via PATCH /compliance/admin/documents/{id}/review.
+    """
+    from models.compliance import DocumentType
+    from schemas.compliance import DocumentUpload
+    doc_payload = DocumentUpload(
+        document_type=DocumentType.background_check,
+        file_key=payload.file_key,
+        expiry_date=payload.expiry_date,
+    )
+    doc = await compliance_service.upload_document(db, current_user, doc_payload)
+    return {
+        "message": "אישור יושרה הוגש בהצלחה — ממתין לאישור מנהל",
+        "document_id": str(doc.id),
+        "status": doc.status,
+    }
+
+
+class BackgroundCheckApprove(BaseModel):
+    expiry_date: date
+
+
+@router.patch(
+    "/admin/drivers/{driver_id}/background-check/approve",
+    summary="[Admin] Mark background check as approved and set expiry",
+)
+async def admin_approve_background_check(
+    driver_id: uuid.UUID,
+    payload: BackgroundCheckApprove,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.admin)),
+) -> dict:
+    """
+    Admin approves the 'אישור יושרה' and records the expiry date
+    on the driver's compliance profile.
+    """
+    from models.compliance import DriverComplianceProfile
+    result = await db.execute(
+        select(DriverComplianceProfile).where(
+            DriverComplianceProfile.driver_id == driver_id
+        )
+    )
+    profile = result.scalar_one_or_none()
+    if profile is None:
+        from models.compliance import DriverComplianceProfile as DCP, ComplianceStatus
+        profile = DCP(driver_id=driver_id)
+        db.add(profile)
+    profile.background_check_approved = True
+    profile.background_check_expiry = payload.expiry_date
+    await db.commit()
+    return {
+        "driver_id": str(driver_id),
+        "background_check_approved": True,
+        "background_check_expiry": payload.expiry_date.isoformat(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Admin: list all drivers pending document review
+# ---------------------------------------------------------------------------
+
+class DriverDocReviewItem(BaseModel):
+    driver_id: uuid.UUID
+    phone: str
+    full_name: str | None
+    auth_status: str
+    compliance_status: str
+    compliance_score: int
+    pending_docs: int
+    total_docs: int
+
+    model_config = {"from_attributes": True}
+
+
+@router.get(
+    "/admin/drivers",
+    response_model=list[DriverDocReviewItem],
+    summary="[Admin] List all drivers with document status",
+)
+async def admin_list_drivers(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.admin)),
+) -> list[DriverDocReviewItem]:
+    from models.compliance import DriverDocument, DocumentStatus, DriverComplianceProfile, ComplianceStatus
+    from sqlalchemy import func as sqlfunc
+
+    drivers_r = await db.execute(
+        select(User)
+        .where(User.role == UserRole.driver)
+        .order_by(User.created_at.desc())
+        .offset(skip).limit(limit)
+    )
+    drivers = list(drivers_r.scalars().all())
+    driver_ids = [d.id for d in drivers]
+
+    # Profiles
+    profiles_r = await db.execute(
+        select(DriverComplianceProfile).where(DriverComplianceProfile.driver_id.in_(driver_ids))
+    )
+    profile_map = {p.driver_id: p for p in profiles_r.scalars().all()}
+
+    # Doc counts
+    docs_r = await db.execute(
+        select(DriverDocument).where(DriverDocument.driver_id.in_(driver_ids))
+    )
+    all_docs = list(docs_r.scalars().all())
+    from collections import defaultdict
+    pending_map: dict[uuid.UUID, int] = defaultdict(int)
+    total_map: dict[uuid.UUID, int] = defaultdict(int)
+    for doc in all_docs:
+        total_map[doc.driver_id] += 1
+        if doc.status == DocumentStatus.pending:
+            pending_map[doc.driver_id] += 1
+
+    result = []
+    for d in drivers:
+        p = profile_map.get(d.id)
+        result.append(DriverDocReviewItem(
+            driver_id=d.id,
+            phone=d.phone,
+            full_name=d.full_name,
+            auth_status=d.auth_status.value if d.auth_status else "pending",
+            compliance_status=p.compliance_status.value if p else "blocked",
+            compliance_score=p.compliance_score if p else 0,
+            pending_docs=pending_map[d.id],
+            total_docs=total_map[d.id],
+        ))
+    return result
+
+
+@router.post(
+    "/admin/drivers/{driver_id}/approve",
+    summary="[Admin] Approve driver — set auth_status=approved",
+)
+async def admin_approve_driver(
+    driver_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_roles(UserRole.admin)),
+) -> dict:
+    from models.user import AuthStatus
+    driver = await db.get(User, driver_id)
+    if driver is None or driver.role != UserRole.driver:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Driver not found")
+    driver.auth_status = AuthStatus.approved
+    await db.commit()
+    return {"driver_id": str(driver_id), "auth_status": "approved"}

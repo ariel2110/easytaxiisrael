@@ -22,6 +22,14 @@ class DriverType(str, enum.Enum):
     rideshare     = "rideshare"       # נהג שיתופי (הובר/אובר) — ממתין לחקיקה
 
 
+class AuthStatus(str, enum.Enum):
+    pending             = "pending"              # נרשם, טרם אימת
+    whatsapp_verified   = "whatsapp_verified"    # אימת ב-WhatsApp
+    persona_in_progress = "persona_in_progress"  # KYC Persona בתהליך (נהגים)
+    persona_completed   = "persona_completed"    # Persona השלים — ממתין לאישור ידני
+    approved            = "approved"             # מאושר לחלוטין
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -42,6 +50,15 @@ class User(Base):
         Enum(DriverType), nullable=True
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Auth status — tracks the verification pipeline stage
+    auth_status: Mapped[AuthStatus] = mapped_column(
+        Enum(AuthStatus), nullable=False, default=AuthStatus.pending, index=True
+    )
+    # Deduplication: store Evolution API message ID of last processed auth message
+    last_wa_msg_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Profile fields — collected during onboarding wizard
+    full_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(254), nullable=True)
     # FCM / APNs device token — updated by client on login
     device_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Terms of Service acceptance timestamp — required before first ride

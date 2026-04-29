@@ -1,28 +1,30 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 
-type Step = 'home' | 'auth'
-
 export default function Login() {
-  const { user, requestWaAuth, cancelWaAuth, waSession, error } = useAuth()
-  const navigate = useNavigate()
-  const [step, setStep] = useState<Step>('home')
+  const { requestWaAuth, cancelWaAuth, waSession, error } = useAuth()
   const [phone, setPhone] = useState('')
   const [busy, setBusy] = useState(false)
   const [localErr, setLocalErr] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (user) navigate('/onboarding', { replace: true })
-  }, [user, navigate])
 
   async function handleRequest() {
     if (!phone.trim()) return
     setBusy(true)
     setLocalErr(null)
+    // Open blank window synchronously (user gesture) — popup blocker won't fire.
+    // Set URL after await so current page stays alive for polling.
+    const waWindow = window.open('', '_blank')
     try {
-      await requestWaAuth(phone.trim())
+      const session = await requestWaAuth(phone.trim())
+      if (session?.whatsapp_link) {
+        if (waWindow) {
+          waWindow.location.href = session.whatsapp_link
+        } else {
+          window.location.href = session.whatsapp_link
+        }
+      }
     } catch (e) {
+      waWindow?.close()
       setLocalErr((e as Error).message)
     } finally {
       setBusy(false)
@@ -33,42 +35,6 @@ export default function Login() {
     cancelWaAuth()
     setLocalErr(null)
     setPhone('')
-    setStep('home')
-  }
-
-  /* ────────────────────────────────────────────────────────────
-     STEP: home — choose role
-  ──────────────────────────────────────────────────────────── */
-  if (step === 'home') {
-    return (
-      <div className="page" style={{ justifyContent: 'center', alignItems: 'center', padding: '2rem' }}>
-        <div className="card slide-in" style={{ width: '100%', maxWidth: 400 }}>
-          {/* Logo */}
-          <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-            <div style={{ fontSize: '3rem' }}>🚕</div>
-            <h1 style={{ fontSize: '1.75rem', fontWeight: 800, marginTop: '.5rem', letterSpacing: '-.5px' }}>EasyTaxi</h1>
-            <p style={{ color: 'var(--text-secondary)', marginTop: '.35rem', fontSize: '.95rem' }}>ברוך הבא — בחר כיצד תרצה להתחבר</p>
-          </div>
-
-          {/* Role buttons */}
-          <button
-            className="btn btn-primary"
-            style={{ width: '100%', padding: '1rem', fontSize: '1.1rem', fontWeight: 600, marginBottom: '.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '.6rem' }}
-            onClick={() => setStep('auth')}
-          >
-            <span style={{ fontSize: '1.4rem' }}>🚗</span> אני נהג
-          </button>
-
-          <a
-            href="https://easytaxiisrael.com"
-            className="btn"
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '.6rem', width: '100%', padding: '1rem', fontSize: '1.1rem', fontWeight: 600, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', textDecoration: 'none', color: 'var(--text-primary)', boxSizing: 'border-box' }}
-          >
-            <span style={{ fontSize: '1.4rem' }}>🙋</span> אני נוסע
-          </a>
-        </div>
-      </div>
-    )
   }
 
   /* ────────────────────────────────────────────────────────────
@@ -137,7 +103,7 @@ export default function Login() {
                   borderRadius: 'var(--radius)',
                 }}
               >
-                <span>📲</span> פתח וואטסאפ לאימות
+                <span>📲</span> פתח וואטסאפ שוב
               </a>
             </div>
             <div style={{

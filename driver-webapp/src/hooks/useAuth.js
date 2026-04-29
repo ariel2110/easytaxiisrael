@@ -33,6 +33,7 @@ export function useAuth() {
         setState((s) => ({ ...s, error: null }));
         const res = await api.auth.requestWaAuth(phone, 'driver');
         setWaSession({ session_id: res.session_id, whatsapp_link: res.whatsapp_link });
+        return res;
         _stopPolling();
         pollRef.current = setInterval(async () => {
             try {
@@ -41,6 +42,8 @@ export function useAuth() {
                     _stopPolling();
                     localStorage.setItem('access_token', poll.access_token);
                     localStorage.setItem('refresh_token', poll.refresh_token);
+                    if (poll.kyc_url)
+                        localStorage.setItem('kyc_url', poll.kyc_url);
                     const user = await api.auth.me();
                     setState({ user, loading: false, error: null });
                     setWaSession(null);
@@ -64,6 +67,7 @@ export function useAuth() {
         await api.auth.logout().catch(() => { });
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
+        localStorage.removeItem('kyc_url');
         setState({ user: null, loading: false, error: null });
     }, [_stopPolling]);
     return { ...state, waSession, requestWaAuth, cancelWaAuth, logout };

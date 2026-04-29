@@ -195,18 +195,24 @@ class TestInquiryStatus:
 class TestPersonaWebhook:
     async def test_unknown_event_returns_200(self, client):
         payload = _persona_webhook_payload("inquiry.unknown_event")
-        resp = await client.post(
-            "/persona/webhook", json=payload
-        )
+        raw = json.dumps(payload).encode()
+        sig = _make_signature(raw, FAKE_SECRET)
+        with patch("core.config.settings.PERSONA_WEBHOOK_SECRET", FAKE_SECRET):
+            resp = await client.post(
+                "/persona/webhook",
+                content=raw,
+                headers={"content-type": "application/json", "persona-signature": sig},
+            )
         assert resp.status_code == 200
         assert resp.json()["received"] is True
 
     async def test_invalid_json_returns_200(self, client):
-        resp = await client.post(
-            "/persona/webhook",
-            content=b"not json",
-            headers={"content-type": "application/json"},
-        )
+        with patch("core.config.settings.PERSONA_WEBHOOK_SECRET", ""):
+            resp = await client.post(
+                "/persona/webhook",
+                content=b"not json",
+                headers={"content-type": "application/json"},
+            )
         assert resp.status_code == 200
 
     async def test_valid_signature_accepted(self, client):
@@ -257,7 +263,14 @@ class TestPersonaWebhook:
         payload = _persona_webhook_payload(
             "inquiry.approved", "inq_approved_test_001"
         )
-        resp = await client.post("/persona/webhook", json=payload)
+        raw = json.dumps(payload).encode()
+        sig = _make_signature(raw, FAKE_SECRET)
+        with patch("core.config.settings.PERSONA_WEBHOOK_SECRET", FAKE_SECRET):
+            resp = await client.post(
+                "/persona/webhook",
+                content=raw,
+                headers={"content-type": "application/json", "persona-signature": sig},
+            )
         assert resp.status_code == 200
 
         # Verify compliance profile was updated
@@ -288,7 +301,14 @@ class TestPersonaWebhook:
         payload = _persona_webhook_payload(
             "inquiry.declined", "inq_declined_test_001"
         )
-        resp = await client.post("/persona/webhook", json=payload)
+        raw = json.dumps(payload).encode()
+        sig = _make_signature(raw, FAKE_SECRET)
+        with patch("core.config.settings.PERSONA_WEBHOOK_SECRET", FAKE_SECRET):
+            resp = await client.post(
+                "/persona/webhook",
+                content=raw,
+                headers={"content-type": "application/json", "persona-signature": sig},
+            )
         assert resp.status_code == 200
 
         from sqlalchemy import select
@@ -308,7 +328,14 @@ class TestPersonaWebhook:
         payload = _persona_webhook_payload(
             "inquiry.approved", "inq_completely_unknown_999"
         )
-        resp = await client.post("/persona/webhook", json=payload)
+        raw = json.dumps(payload).encode()
+        sig = _make_signature(raw, FAKE_SECRET)
+        with patch("core.config.settings.PERSONA_WEBHOOK_SECRET", FAKE_SECRET):
+            resp = await client.post(
+                "/persona/webhook",
+                content=raw,
+                headers={"content-type": "application/json", "persona-signature": sig},
+            )
         assert resp.status_code == 200
 
 

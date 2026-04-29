@@ -3,6 +3,7 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, String, Text
+# (Date is used for background_check_expiry, taxi_license_expiry)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -105,6 +106,21 @@ class DriverComplianceProfile(Base):
     # Auto-blocking flag set by the system; admin can manually override
     auto_blocked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     block_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # ── Criminal background check (אישור יושרה) ─────────────────────────
+    # Persona cannot automate this for Israel — manual upload + admin review
+    background_check_approved: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    background_check_expiry: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    # ── Professional taxi license (רישיון נהיגה לרכב שכור) ───────────────
+    # Only required for driver_type == licensed_taxi
+    # Verified via Persona PERSONA_TAXI_LICENSE_TEMPLATE_ID or manual upload
+    taxi_license_approved: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    taxi_license_expiry: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     last_evaluated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

@@ -36,6 +36,7 @@ class PhoneNormalizeMixin(BaseModel):
 
 class OTPRequest(PhoneNormalizeMixin):
     phone: str = _phone_field()
+    role: UserRole = Field(UserRole.passenger, description="Role assigned on first login")
 
 
 class OTPVerify(PhoneNormalizeMixin):
@@ -89,5 +90,15 @@ class UserRead(BaseModel):
     phone: str
     role: UserRole
     is_active: bool
+    auth_status: str = "pending"
+    full_name: str | None = None
+    email: str | None = None
+    driver_type: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class ProfileUpdate(BaseModel):
+    """Payload for PATCH /auth/profile — all fields optional."""
+    full_name: str | None = Field(None, min_length=2, max_length=120)
+    email: str | None = Field(None, pattern=r'^[^@\s]+@[^@\s]+\.[^@\s]+$')

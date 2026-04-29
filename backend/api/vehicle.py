@@ -21,7 +21,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import httpx
-import respx
 
 from core.config import settings
 from core.database import get_db

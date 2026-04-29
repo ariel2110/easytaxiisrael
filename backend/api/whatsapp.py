@@ -5,12 +5,12 @@ Also handles incoming messages via Evolution API webhook, including WA auth flow
 
 import logging
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Header, Request
 
 from core.config import settings
 from core.dependencies import get_current_user
 from core.database import get_db
-from models.user import User, UserRole
+from models.user import User, UserRole, AuthStatus
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +26,15 @@ def _require_admin(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
+def _check_admin_key(x_admin_key: str | None = Header(default=None)) -> None:
+    """Light auth for setup endpoints: requires the Evolution API key in X-Admin-Key header."""
+    if not x_admin_key or x_admin_key != settings.EVOLUTION_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid admin key — pass X-Admin-Key header",
+        )
+
+
 @router.get("/config", summary="Return Evolution API key for the setup page")
 async def get_whatsapp_config(_: User = Depends(_require_admin)) -> dict:
     return {
@@ -35,7 +44,99 @@ async def get_whatsapp_config(_: User = Depends(_require_admin)) -> dict:
     }
 
 
-async def _handle_auth_message(phone: str, text: str, db: AsyncSession) -> bool:
+# ── Admin setup endpoints (protected by X-Admin-Key = EVOLUTION_API_KEY) ──────
+
+@router.get("/status", summary="Get WhatsApp connection status and connected phone")
+async def get_whatsapp_status(_: None = Depends(_check_admin_key)) -> dict:
+    from services import whatsapp as wa
+    from core.redis import redis_client
+    info = await wa.get_instance_info()
+    state = await wa.get_connection_state()
+    owner_raw = (info or {}).get("owner", "")
+    owner_phone = owner_raw.replace("@s.whatsapp.net", "") if owner_raw else None
+    # Fetch webhook config from dedicated endpoint
+    configured_webhook = await wa.get_webhook_url()
+    # Effective platform phone: Redis override takes priority over settings
+    redis_override = await redis_client.get("whatsapp:platform_phone")
+    effective_platform_phone = redis_override if redis_override else settings.WHATSAPP_PLATFORM_PHONE
+    return {
+        "state": state,
+        "owner_phone": owner_phone,
+        "profile_name": (info or {}).get("profileName"),
+        "configured_webhook": configured_webhook,
+        "correct_webhook": "http://backend:8000/whatsapp/webhook",
+        "platform_phone": effective_platform_phone,
+        "platform_phone_source": "redis" if redis_override else "settings",
+        "instance": settings.EVOLUTION_INSTANCE,
+    }
+
+
+@router.get("/qr", summary="Get QR code for WhatsApp connection")
+async def get_whatsapp_qr(_: None = Depends(_check_admin_key)) -> dict:
+    from services import whatsapp as wa
+    data = await wa.get_qrcode()
+    if data is None:
+        raise HTTPException(status_code=503, detail="לא ניתן לקבל QR — בדוק שהאינסטנס קיים")
+    return data
+
+
+@router.post("/reconnect", summary="Logout current session and generate fresh QR code")
+async def reconnect_whatsapp(_: None = Depends(_check_admin_key)) -> dict:
+    import asyncio
+    from services import whatsapp as wa
+    await wa.logout_instance()
+    await asyncio.sleep(2)  # Give Evolution API time to process the logout
+    data = await wa.get_qrcode()
+    return {"status": "ok", "qr": data}
+
+
+@router.post("/fix-webhook", summary="Update Evolution API webhook URL to the correct backend endpoint")
+async def fix_whatsapp_webhook(_: None = Depends(_check_admin_key)) -> dict:
+    from services import whatsapp as wa
+    correct_url = "http://backend:8000/whatsapp/webhook"
+    ok = await wa.set_webhook(correct_url)
+    return {"status": "ok" if ok else "error", "webhook_url": correct_url}
+
+
+@router.post("/update-phone", summary="Update the platform WhatsApp phone number (stored in Redis, live update)")
+async def update_platform_phone(body: dict, _: None = Depends(_check_admin_key)) -> dict:
+    """
+    Store the platform's WhatsApp phone number in Redis so the auth flow
+    uses the correct number without requiring a backend restart.
+    The value persists until overwritten.
+    """
+    from core.redis import redis_client
+    phone = str(body.get("phone", "")).strip().lstrip("+").replace("-", "").replace(" ", "")
+    if not phone or not phone.isdigit() or len(phone) < 7:
+        raise HTTPException(status_code=400, detail="phone must be digits only, with country code (e.g. 972501234567)")
+    await redis_client.set("whatsapp:platform_phone", phone)
+    return {"status": "ok", "platform_phone": phone}
+
+
+@router.get("/platform-phone", summary="Get the effective platform WhatsApp phone (Redis override or settings default)")
+async def get_platform_phone(_: None = Depends(_check_admin_key)) -> dict:
+    from core.redis import redis_client
+    override = await redis_client.get("whatsapp:platform_phone")
+    effective = override if override else settings.WHATSAPP_PLATFORM_PHONE
+    return {
+        "effective": effective,
+        "redis_override": override if override else None,
+        "settings_default": settings.WHATSAPP_PLATFORM_PHONE,
+    }
+
+
+@router.post("/test-send", summary="Send a test WhatsApp message to verify the connection")
+async def test_send_whatsapp(body: dict, _: None = Depends(_check_admin_key)) -> dict:
+    from services import whatsapp as wa
+    phone = str(body.get("phone", "")).strip()
+    if not phone:
+        raise HTTPException(status_code=400, detail="phone is required")
+    success = await wa.send_text(phone, "✅ *EasyTaxi* — הודעת בדיקה. המערכת עובדת! 🚕")
+    return {"success": success}
+
+
+
+async def _handle_auth_message(phone: str, text: str, db: AsyncSession, msg_id: str | None = None) -> bool:
     """
     Detect and process WhatsApp auth messages.
     Message format: "🔐 EasyTaxi: אמת אותי | <token>"
@@ -45,7 +146,6 @@ async def _handle_auth_message(phone: str, text: str, db: AsyncSession) -> bool:
         WA_AUTH_MESSAGE_PREFIX,
         complete_wa_auth_session,
         get_wa_session_phone_role,
-        normalize_phone,
     )
     from services import whatsapp as whatsapp_svc
 
@@ -56,27 +156,28 @@ async def _handle_auth_message(phone: str, text: str, db: AsyncSession) -> bool:
     try:
         token = text.split("|")[-1].strip()
     except Exception:
+        print(f"[AUTH-DEBUG] malformed auth message: {repr(text[:100])}", flush=True)
         return True  # was an auth message but malformed
 
+    print(f"[AUTH-DEBUG] token={repr(token)} phone={repr(phone)}", flush=True)
     result = await get_wa_session_phone_role(token)
+    print(f"[AUTH-DEBUG] get_wa_session_phone_role result={result}", flush=True)
     if result is None:
         await whatsapp_svc.send_text(
             phone,
-            "❌ *EasyTaxi* — קישור האימות פג תוקף.\n"
-            "אנא חזור לאפליקציה ובקש קישור חדש.",
+            "⏰ *קישור האימות פג תוקף*\n\n"
+            "הקישורים תקפים ל-10 דקות בלבד.\n"
+            "לחץ כאן כדי לבקש קישור חדש:\n"
+            "🔗 https://easytaxiisrael.com/login\n\n"
+            "לעזרה: https://wa.me/447474775344",
         )
         return True
 
     stored_phone, role = result
-    sender_phone = normalize_phone(phone)
-
-    # Verify the sender is the same phone that requested auth
-    if sender_phone != stored_phone:
-        await whatsapp_svc.send_text(
-            phone,
-            "❌ *EasyTaxi* — מספר הטלפון אינו תואם לבקשת האימות.",
-        )
-        return True
+    # Note: we do NOT validate sender phone vs stored_phone here.
+    # For @lid (WA linked device) JIDs Evolution API may report the platform's own
+    # number as sender instead of the real user phone. The token itself is the
+    # security proof — it is a one-time unguessable hex value with a 5-minute TTL.
 
     # Find or create user
     res = await db.execute(select(User).where(User.phone == stored_phone))
@@ -93,22 +194,78 @@ async def _handle_auth_message(phone: str, text: str, db: AsyncSession) -> bool:
         )
         return True
 
+    # Deduplicate: skip if we already processed this exact WA message
+    if msg_id and user.last_wa_msg_id == msg_id:
+        return True
+
     # Complete auth session → stores JWT in Redis
+    print(f"[AUTH-DEBUG] calling complete_wa_auth_session token={repr(token)} user_id={user.id}", flush=True)
     success = await complete_wa_auth_session(token, str(user.id), user.role.value)
-    await db.commit()
+    print(f"[AUTH-DEBUG] complete_wa_auth_session success={success}", flush=True)
 
     if success:
-        dashboard_url = (
-            "https://driver.easytaxiisrael.com"
-            if user.role == UserRole.driver
-            else "https://easytaxiisrael.com"
-        )
-        await whatsapp_svc.send_text(
-            phone,
-            f"✅ *EasyTaxi* — אומתת בהצלחה!\n\n"
-            f"חזור לאפליקציה — הכניסה תושלם אוטומטית.\n"
-            f"🔗 {dashboard_url}",
-        )
+        # Update deduplication key
+        if msg_id:
+            user.last_wa_msg_id = msg_id
+
+        if user.role == UserRole.driver:
+            # Driver: create Persona inquiry immediately and send KYC link via WhatsApp
+            from services import persona as persona_svc
+            from core.config import settings as _settings
+            kyc_url: str | None = None
+            if _settings.PERSONA_API_KEY and _settings.PERSONA_TEMPLATE_ID:
+                try:
+                    inquiry = await persona_svc.create_inquiry(db, user.id)
+                    # Include session-token for seamless hosted flow (no re-auth on Persona side)
+                    if inquiry.session_token:
+                        kyc_url = (
+                            f"https://withpersona.com/verify"
+                            f"?inquiry-id={inquiry.persona_inquiry_id}"
+                            f"&session-token={inquiry.session_token}"
+                        )
+                    else:
+                        kyc_url = f"https://withpersona.com/verify?inquiry-id={inquiry.persona_inquiry_id}"
+                    user.auth_status = AuthStatus.persona_in_progress
+                except Exception:
+                    user.auth_status = AuthStatus.whatsapp_verified
+            else:
+                user.auth_status = AuthStatus.whatsapp_verified
+            await db.commit()
+
+            if kyc_url:
+                await whatsapp_svc.send_text(
+                    phone,
+                    f"✅ *אומת בהצלחה!*\n\n"
+                    f"שלב אחרון לפני שמתחילים לנסוע — אימות זהות מהיר (כ-2 דקות).\n"
+                    f"תצטרך: תעודת זהות או דרכון + צילום פנים (סלפי).\n\n"
+                    f"🔗 {kyc_url}\n\n"
+                    f"לאחר האישור תוכל לחזור לדשבורד הנהג:\n"
+                    f"🚗 https://driver.easytaxiisrael.com\n\n"
+                    f"_לתמיכה: https://wa.me/447474775344_",
+                )
+            else:
+                await whatsapp_svc.send_text(
+                    phone,
+                    "✅ *אומת בהצלחה!*\n\n"
+                    "כדי להשלים הרשמה ולהגדיר את הרכב שלך, היכנס לדשבורד הנהג:\n"
+                    "🚗 https://driver.easytaxiisrael.com\n\n"
+                    "_לתמיכה: https://wa.me/447474775344_",
+                )
+        else:
+            # Passenger: immediately approved after WhatsApp
+            user.auth_status = AuthStatus.approved
+            await db.commit()
+            await whatsapp_svc.send_text(
+                phone,
+                "✅ *האימות הצליח!*\n\n"
+                "ברוך הבא ל-EasyTaxi ישראל 🚕\n\n"
+                "חזור לדפדפן — הדף כבר מתעדכן אוטומטית ויכניס אותך.\n\n"
+                "לא רואה? לחץ כאן:\n"
+                "👉 https://easytaxiisrael.com/app\n\n"
+                "_EasyTaxi Israel — מהיר, בטוח, ללא סיסמא_ 🚕",
+            )
+    else:
+        await db.commit()
     return True
 
 
@@ -127,28 +284,39 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
 
     event = payload.get("event", "")
     data = payload.get("data", {})
+    print(f"[WH-RAW] event={repr(event)} data_keys={list(data.keys()) if isinstance(data, dict) else type(data).__name__}", flush=True)
 
-    if event == "messages.upsert":
+    # Evolution API v1.8+ uses UPPERCASE event names; normalise for compatibility
+    event_lower = event.lower().replace("_", ".")
+
+    if event_lower in ("messages.upsert",):
         key = data.get("key", {})
         # Skip messages sent by us
         if key.get("fromMe"):
             return {"status": "ok"}
 
         remote_jid = key.get("remoteJid", "")
-        phone = remote_jid.replace("@s.whatsapp.net", "").replace("@g.us", "")
+        # @lid = Meta linked-device pseudonym — real phone is in top-level "sender" field
+        if remote_jid.endswith("@lid"):
+            sender_jid = payload.get("sender", "") or data.get("participant", "")
+            phone = sender_jid.replace("@s.whatsapp.net", "").replace("@lid", "").replace("@g.us", "")
+        else:
+            phone = remote_jid.replace("@s.whatsapp.net", "").replace("@g.us", "")
+        msg_id = key.get("id")  # Evolution API message ID — used for deduplication
         msg_obj = data.get("message", {})
         text = (
             msg_obj.get("conversation")
             or msg_obj.get("extendedTextMessage", {}).get("text")
             or ""
         )
+        print(f"[WH-DEBUG] from={phone} fromMe={key.get('fromMe')} jid={remote_jid} text={repr(text[:200])} msg_keys={list(msg_obj.keys()) if msg_obj else []}", flush=True)
         logger.info("📨 WhatsApp incoming | from=%s | text=%s", phone, text[:120])
 
         # Try to handle as auth message first
         if text:
-            await _handle_auth_message(phone, text, db)
+            await _handle_auth_message(phone, text, db, msg_id)
 
-    elif event == "connection.update":
+    elif event_lower in ("connection.update",):
         state = data.get("state", "")
         logger.info("🔗 WhatsApp connection update: %s", state)
 

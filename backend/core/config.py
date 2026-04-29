@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # JWT
-    JWT_SECRET_KEY: str = "change-me-in-production"
+    JWT_SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
 
     # Fare
@@ -35,7 +35,7 @@ class Settings(BaseSettings):
 
     # Security — must be a valid 32-byte URL-safe base64 Fernet key.
     # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-    ENCRYPTION_KEY: str = "change-me-32-bytes-encryption-key"
+    ENCRYPTION_KEY: str
 
     # CORS — comma-separated list of allowed origins (production)
     CORS_ORIGINS: str = "https://easytaxiisrael.com,https://www.easytaxiisrael.com,https://driver.easytaxiisrael.com"
@@ -51,9 +51,11 @@ class Settings(BaseSettings):
     # Persona KYC (https://withpersona.com)
     PERSONA_API_KEY: str = ""
     PERSONA_WEBHOOK_SECRET: str = ""
-    PERSONA_TEMPLATE_ID: str = ""          # inquiry template ID — identity KYC (GovID + Selfie)
-    PERSONA_VEHICLE_TEMPLATE_ID: str = "itmpl_ACtCnpSYUfM5hTMSUV5UYzeYfVZZUx"  # vehicle docs + photos
+    PERSONA_TEMPLATE_ID: str = ""                    # Template 1: GovID (ת"ז) + Driver License + Selfie (liveness video)
+    PERSONA_VEHICLE_TEMPLATE_ID: str = "itmpl_ACtCnpSYUfM5hTMSUV5UYzeYfVZZUx"  # Template 2: vehicle docs (ביטוח + טסט + רישוי)
+    PERSONA_TAXI_LICENSE_TEMPLATE_ID: str = ""       # Template 3: רישיון נהיגה לרכב שכור (licensed_taxi only)
     PERSONA_API_VERSION: str = "2025-12-08"
+    DRIVER_APP_URL: str = "https://driver.easytaxiisrael.com"  # used as redirect-uri after Persona KYC
 
     # ── Multi-Agent System — LLM API keys (all optional; agents fall back gracefully) ──
     # Onboarding + Support agents (GPT-4o Vision / GPT-4o mini)
@@ -74,8 +76,8 @@ class Settings(BaseSettings):
     GOOGLE_MAPS_API_KEY: str | None = None
 
     # Admin password login
-    ADMIN_USERNAME: str = "972546363350"
-    ADMIN_PASSWORD: str = "211081AA"
+    ADMIN_USERNAME: str
+    ADMIN_PASSWORD: str
 
     @field_validator("ENCRYPTION_KEY")
     @classmethod

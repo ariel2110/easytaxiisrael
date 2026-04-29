@@ -119,6 +119,43 @@ async def get_inquiry_status(
     )
 
 
+@router.post(
+    "/inquiry/taxi-license",
+    response_model=InquiryStartResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Start a taxi professional-license KYC inquiry (licensed_taxi drivers only)",
+)
+async def start_taxi_license_inquiry(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.driver)),
+) -> InquiryStartResponse:
+    """
+    Create a Persona inquiry using the professional-taxi-license template
+    (PERSONA_TAXI_LICENSE_TEMPLATE_ID). Only available for licensed_taxi drivers.
+
+    The driver uploads their 'רישיון נהיגה לרכב שכור' (taxi professional license)
+    via Persona's document verification flow.
+    """
+    from models.user import DriverType
+    if current_user.driver_type != DriverType.licensed_taxi:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only licensed taxi drivers require a professional taxi license inquiry",
+        )
+    if not settings.PERSONA_TAXI_LICENSE_TEMPLATE_ID:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Taxi license verification is not configured on this server",
+        )
+    inquiry = await persona_svc.create_taxi_license_inquiry(db, current_user.id)
+    return InquiryStartResponse(
+        inquiry_id=str(inquiry.id),
+        persona_inquiry_id=inquiry.persona_inquiry_id,
+        status=inquiry.status,
+        hosted_flow_url=_hosted_flow_url(inquiry),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Persona webhook (no JWT — authenticated by signature)
 # ---------------------------------------------------------------------------

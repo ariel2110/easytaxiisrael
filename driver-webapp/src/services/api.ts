@@ -59,6 +59,9 @@ export const api = {
       request<{ message: string }>('POST', '/auth/logout', {
         refresh_token: localStorage.getItem('refresh_token') ?? '',
       }),
+
+    updateProfile: (data: { full_name?: string; email?: string }) =>
+      request<User>('PATCH', '/auth/profile', data),
   },
 
   // ----- Rides -----

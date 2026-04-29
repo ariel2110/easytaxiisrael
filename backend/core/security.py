@@ -11,7 +11,7 @@ from core.redis import redis_client
 ALGORITHM = "HS256"
 OTP_TTL_SECONDS = 300        # 5 minutes
 REFRESH_TOKEN_TTL_SECONDS = 7 * 24 * 3600  # 7 days
-WA_AUTH_TTL_SECONDS = 300    # 5 minutes for WhatsApp auth sessions
+WA_AUTH_TTL_SECONDS = 900    # 15 minutes for WhatsApp auth sessions
 
 
 # ---------------------------------------------------------------------------

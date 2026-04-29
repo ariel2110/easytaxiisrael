@@ -338,7 +338,7 @@ class TestWaAuth:
         assert "session_id" in data
         assert "whatsapp_link" in data
         assert "wa.me" in data["whatsapp_link"]
-        assert data["expires_in_seconds"] == 300
+        assert data["expires_in_seconds"] == 900
 
     async def test_request_accepts_all_israeli_phone_formats(self, client):
         for phone in ["+972501234567", "972501234567", "0501234567"]:

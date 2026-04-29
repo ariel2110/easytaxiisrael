@@ -1,27 +1,32 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 export default function Login() {
-    const { user, requestWaAuth, cancelWaAuth, waSession, error } = useAuth();
-    const navigate = useNavigate();
-    const [step, setStep] = useState('home');
+    const { requestWaAuth, cancelWaAuth, waSession, error } = useAuth();
     const [phone, setPhone] = useState('');
     const [busy, setBusy] = useState(false);
     const [localErr, setLocalErr] = useState(null);
-    useEffect(() => {
-        if (user)
-            navigate('/onboarding', { replace: true });
-    }, [user, navigate]);
     async function handleRequest() {
         if (!phone.trim())
             return;
         setBusy(true);
         setLocalErr(null);
+        // Open blank window synchronously (user gesture) — popup blocker won't fire.
+        // Set URL after await so current page stays alive for polling.
+        const waWindow = window.open('', '_blank');
         try {
-            await requestWaAuth(phone.trim());
+            const session = await requestWaAuth(phone.trim());
+            if (session?.whatsapp_link) {
+                if (waWindow) {
+                    waWindow.location.href = session.whatsapp_link;
+                }
+                else {
+                    window.location.href = session.whatsapp_link;
+                }
+            }
         }
         catch (e) {
+            waWindow?.close();
             setLocalErr(e.message);
         }
         finally {
@@ -32,13 +37,6 @@ export default function Login() {
         cancelWaAuth();
         setLocalErr(null);
         setPhone('');
-        setStep('home');
-    }
-    /* ────────────────────────────────────────────────────────────
-       STEP: home — choose role
-    ──────────────────────────────────────────────────────────── */
-    if (step === 'home') {
-        return (_jsx("div", { className: "page", style: { justifyContent: 'center', alignItems: 'center', padding: '2rem' }, children: _jsxs("div", { className: "card slide-in", style: { width: '100%', maxWidth: 400 }, children: [_jsxs("div", { style: { textAlign: 'center', marginBottom: '2.5rem' }, children: [_jsx("div", { style: { fontSize: '3rem' }, children: "\uD83D\uDE95" }), _jsx("h1", { style: { fontSize: '1.75rem', fontWeight: 800, marginTop: '.5rem', letterSpacing: '-.5px' }, children: "EasyTaxi" }), _jsx("p", { style: { color: 'var(--text-secondary)', marginTop: '.35rem', fontSize: '.95rem' }, children: "\u05D1\u05E8\u05D5\u05DA \u05D4\u05D1\u05D0 \u2014 \u05D1\u05D7\u05E8 \u05DB\u05D9\u05E6\u05D3 \u05EA\u05E8\u05E6\u05D4 \u05DC\u05D4\u05EA\u05D7\u05D1\u05E8" })] }), _jsxs("button", { className: "btn btn-primary", style: { width: '100%', padding: '1rem', fontSize: '1.1rem', fontWeight: 600, marginBottom: '.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '.6rem' }, onClick: () => setStep('auth'), children: [_jsx("span", { style: { fontSize: '1.4rem' }, children: "\uD83D\uDE97" }), " \u05D0\u05E0\u05D9 \u05E0\u05D4\u05D2"] }), _jsxs("a", { href: "https://easytaxiisrael.com", className: "btn", style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '.6rem', width: '100%', padding: '1rem', fontSize: '1.1rem', fontWeight: 600, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', textDecoration: 'none', color: 'var(--text-primary)', boxSizing: 'border-box' }, children: [_jsx("span", { style: { fontSize: '1.4rem' }, children: "\uD83D\uDE4B" }), " \u05D0\u05E0\u05D9 \u05E0\u05D5\u05E1\u05E2"] })] }) }));
     }
     /* ────────────────────────────────────────────────────────────
        STEP: auth — WhatsApp link flow
@@ -54,7 +52,7 @@ export default function Login() {
                                         textDecoration: 'none',
                                         padding: '0.75rem 1.5rem',
                                         borderRadius: 'var(--radius)',
-                                    }, children: [_jsx("span", { children: "\uD83D\uDCF2" }), " \u05E4\u05EA\u05D7 \u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4 \u05DC\u05D0\u05D9\u05DE\u05D5\u05EA"] })] }), _jsxs("div", { style: {
+                                    }, children: [_jsx("span", { children: "\uD83D\uDCF2" }), " \u05E4\u05EA\u05D7 \u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4 \u05E9\u05D5\u05D1"] })] }), _jsxs("div", { style: {
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',

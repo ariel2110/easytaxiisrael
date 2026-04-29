@@ -11,8 +11,11 @@ WebSocket auth: pass JWT access token as ?token= query parameter
 """
 
 import asyncio
+import logging
+import time as _time
 import uuid
 from collections import defaultdict
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from jose import JWTError
@@ -22,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import AsyncSessionLocal, get_db
 from core.dependencies import get_current_user, require_roles
-from core.pubsub import publish_location, subscribe_to_ride_location
+from core.pubsub import publish_location, subscribe_to_ride_location, update_driver_geo
 from core.security import decode_access_token
 from models.location import DriverLocationEvent
 from models.ride import Ride, RideStatus
@@ -40,6 +43,13 @@ _MAX_DRIVER_CONNECTIONS_PER_RIDE = 1   # only the assigned driver
 _MAX_PASSENGER_CONNECTIONS_PER_RIDE = 5  # passenger + possible admin monitors
 _ws_driver_counts: dict[uuid.UUID, int] = defaultdict(int)
 _ws_passenger_counts: dict[uuid.UUID, int] = defaultdict(int)
+
+# ── DB write throttle ────────────────────────────────────────────────────────
+# Redis pub/sub broadcasts EVERY ping regardless of this throttle.
+# PostgreSQL receives at most one insert per ride per N seconds.
+_DB_WRITE_MIN_INTERVAL: float = 3.0  # seconds
+_last_db_write: dict[uuid.UUID, float] = defaultdict(float)
+_logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -100,6 +110,26 @@ def _event_to_payload(event: DriverLocationEvent) -> dict:
     }
 
 
+async def _persist_location_safe(
+    ride_id: uuid.UUID, driver_id: uuid.UUID, lat: float, lng: float
+) -> None:
+    """Fire-and-forget DB write. Errors are logged but never propagate to callers."""
+    try:
+        await _persist_location(ride_id, driver_id, lat, lng)
+    except Exception as exc:
+        _logger.warning("GPS DB write failed (non-fatal): %s", exc)
+
+
+def _maybe_schedule_persist(
+    ride_id: uuid.UUID, driver_id: uuid.UUID, lat: float, lng: float
+) -> None:
+    """Throttle: schedule a DB write only if the minimum interval has elapsed."""
+    now = _time.monotonic()
+    if now - _last_db_write[ride_id] >= _DB_WRITE_MIN_INTERVAL:
+        _last_db_write[ride_id] = now
+        asyncio.create_task(_persist_location_safe(ride_id, driver_id, lat, lng))
+
+
 # ---------------------------------------------------------------------------
 # HTTP endpoints
 # ---------------------------------------------------------------------------
@@ -135,6 +165,7 @@ async def push_location_http(
     await db.commit()
     await db.refresh(event)
     await publish_location(ride_id, _event_to_payload(event))
+    await update_driver_geo(current_user.id, payload.lat, payload.lng)
     return event
 
 
@@ -203,9 +234,20 @@ async def driver_location_ws(
                 await websocket.send_json({"error": exc.errors(include_url=False)})
                 continue
 
-            event = await _persist_location(ride_id, user.id, loc.lat, loc.lng)
-            await publish_location(ride_id, _event_to_payload(event))
-            await websocket.send_json({"status": "ok", "recorded_at": event.recorded_at.isoformat()})
+            now_iso = datetime.now(timezone.utc).isoformat()
+            live_payload = {
+                "ride_id": str(ride_id),
+                "driver_id": str(user.id),
+                "lat": loc.lat,
+                "lng": loc.lng,
+                "recorded_at": now_iso,
+            }
+            # 1. Redis: broadcast immediately — NEVER blocked by PostgreSQL
+            await publish_location(ride_id, live_payload)
+            await update_driver_geo(user.id, loc.lat, loc.lng)
+            # 2. PostgreSQL: throttled background write — never blocks the WS loop
+            _maybe_schedule_persist(ride_id, user.id, loc.lat, loc.lng)
+            await websocket.send_json({"status": "ok", "recorded_at": now_iso})
 
     except WebSocketDisconnect:
         pass
