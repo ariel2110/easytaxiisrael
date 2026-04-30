@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../services/api';
 import SurgeIndicator from '../components/SurgeIndicator';
+import RideMap from '../components/RideMap';
 // Default to Tel Aviv center
 const DEFAULT_COORDS = { lat: 32.0853, lng: 34.7818 };
 const TOS_KEY = 'easytaxi_tos_v1';
@@ -206,39 +207,13 @@ export default function RequestRide() {
                                     color: tosAccepted ? '#22C55E' : '#F59E0B',
                                     fontSize: '.68rem', fontWeight: 700, cursor: tosAccepted ? 'default' : 'pointer',
                                     transition: 'all .2s',
-                                }, children: [tosAccepted ? '✅' : '⚠️', _jsx("span", { style: { display: window.innerWidth > 360 ? 'inline' : 'none' }, children: tosAccepted ? 'תנאים אושרו' : 'ללא אישור' })] }), _jsx("button", { style: { fontSize: '.75rem', color: 'var(--text-secondary)', padding: '.25rem .5rem', border: '1px solid var(--border)', borderRadius: 6 }, onClick: () => navigate('/app/profile'), children: "\uD83D\uDC64" }), _jsx("button", { style: { fontSize: '.75rem', color: 'var(--text-secondary)', padding: '.25rem .5rem', border: '1px solid var(--border)', borderRadius: 6 }, onClick: () => { logout(); navigate('/login'); }, children: "\u05D9\u05E6\u05D9\u05D0\u05D4" })] })] }), _jsxs("div", { className: "map-fullscreen", style: { flex: '0 0 38vh', minHeight: 180, position: 'relative' }, children: [_jsx("div", { style: {
-                            position: 'absolute', inset: 0,
-                            background: `
-            linear-gradient(rgba(255,215,0,.03) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,215,0,.03) 1px, transparent 1px),
-            linear-gradient(180deg, #1a2a1a 0%, #1e2e1e 100%)
-          `,
-                            backgroundSize: '40px 40px, 40px 40px, 100% 100%',
-                        } }), _jsxs("div", { style: {
-                            position: 'absolute', top: '45%', left: '50%',
-                            transform: 'translate(-50%, -50%)',
-                            textAlign: 'center',
-                        }, children: [[0, 0.5, 1].map(delay => (_jsx("div", { style: {
-                                    position: 'absolute', top: '50%', left: '50%',
-                                    transform: 'translate(-50%, -50%)',
-                                    width: 60, height: 60,
-                                    borderRadius: '50%',
-                                    border: '2px solid rgba(255,215,0,0.5)',
-                                    animation: `ripple 2s ease-out ${delay}s infinite`,
-                                } }, delay))), _jsx("div", { style: { position: 'relative', fontSize: '2.5rem', filter: 'drop-shadow(0 0 12px rgba(255,215,0,.6))' }, className: "taxi-bounce", children: "\uD83D\uDE95" })] }), _jsx("div", { style: {
-                            position: 'absolute', bottom: '30%', left: '55%',
-                            transform: 'translate(-50%, 0)',
-                            fontSize: '1.75rem',
-                            filter: 'drop-shadow(0 2px 8px rgba(0,0,0,.8))',
-                        }, children: "\uD83D\uDCCD" }), surge && !isNaN(parseFloat(surge.surge_multiplier)) && parseFloat(surge.surge_multiplier) > 1 && (_jsx("div", { style: { position: 'absolute', top: '1rem', right: '1rem' }, children: _jsx(SurgeIndicator, { surge: surge }) })), locating && (_jsxs("div", { style: {
+                                }, children: [tosAccepted ? '✅' : '⚠️', _jsx("span", { style: { display: window.innerWidth > 360 ? 'inline' : 'none' }, children: tosAccepted ? 'תנאים אושרו' : 'ללא אישור' })] }), _jsx("button", { style: { fontSize: '.75rem', color: 'var(--text-secondary)', padding: '.25rem .5rem', border: '1px solid var(--border)', borderRadius: 6 }, onClick: () => navigate('/app/profile'), children: "\uD83D\uDC64" }), _jsx("button", { style: { fontSize: '.75rem', color: 'var(--text-secondary)', padding: '.25rem .5rem', border: '1px solid var(--border)', borderRadius: 6 }, onClick: () => { logout(); navigate('/login'); }, children: "\u05D9\u05E6\u05D9\u05D0\u05D4" })] })] }), _jsxs("div", { className: "map-fullscreen", style: { flex: '0 0 38vh', minHeight: 180, position: 'relative' }, children: [_jsx(RideMap, { pickupLat: pickup.lat, pickupLng: pickup.lng, dropoffLat: dropoff.lat, dropoffLng: dropoff.lng, height: "100%" }), surge && !isNaN(parseFloat(surge.surge_multiplier)) && parseFloat(surge.surge_multiplier) > 1 && (_jsx("div", { style: { position: 'absolute', top: '1rem', right: '1rem', zIndex: 800 }, children: _jsx(SurgeIndicator, { surge: surge }) })), locating && (_jsxs("div", { style: {
                             position: 'absolute', bottom: '1rem', left: '50%', transform: 'translateX(-50%)',
                             background: 'rgba(26,26,26,.85)', color: 'var(--accent)',
                             padding: '.4rem .9rem', borderRadius: 20, fontSize: '.8rem', fontWeight: 600,
                             backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', gap: '.5rem',
-                        }, children: [_jsx("span", { className: "spinner", style: { width: 12, height: 12, border: '2px solid var(--accent)', borderTopColor: 'transparent' } }), "\u05DE\u05D0\u05EA\u05E8 \u05DE\u05D9\u05E7\u05D5\u05DD\u2026"] })), _jsxs("div", { style: {
-                            position: 'absolute', bottom: '1rem', right: '1rem',
-                            fontSize: '.7rem', color: 'rgba(255,255,255,.3)',
-                        }, children: [pickup.lat.toFixed(4), ", ", pickup.lng.toFixed(4)] })] }), _jsxs("div", { style: {
+                            zIndex: 800,
+                        }, children: [_jsx("span", { className: "spinner", style: { width: 12, height: 12, border: '2px solid var(--accent)', borderTopColor: 'transparent' } }), "\u05DE\u05D0\u05EA\u05E8 \u05DE\u05D9\u05E7\u05D5\u05DD\u2026"] }))] }), _jsxs("div", { style: {
                     flex: 1, background: 'var(--bg-surface)',
                     borderTop: '1px solid var(--border)',
                     borderRadius: '20px 20px 0 0',

@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../services/api'
 import { RideWebSocket } from '../services/websocket'
 import type { Ride, FareEstimate } from '../types'
+import RideMap from '../components/RideMap'
+import RatingModal from '../components/RatingModal'
 
 export default function ActiveRide() {
   const { rideId } = useParams<{ rideId: string }>()
@@ -11,6 +13,9 @@ export default function ActiveRide() {
   const [fare, setFare] = useState<FareEstimate | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [showRating, setShowRating] = useState(false)
+  const [driverLat, setDriverLat] = useState<number | null>(null)
+  const [driverLng, setDriverLng] = useState<number | null>(null)
   const wsRef = useRef<RideWebSocket | null>(null)
 
   useEffect(() => {
@@ -30,6 +35,8 @@ export default function ActiveRide() {
           lng: pos.coords.longitude,
           timestamp: new Date().toISOString(),
         }
+        setDriverLat(pos.coords.latitude)
+        setDriverLng(pos.coords.longitude)
         ws.send(payload)
         api.tracking.postLocation(rideId, payload.lat, payload.lng).catch(() => {})
       })
@@ -48,8 +55,17 @@ export default function ActiveRide() {
     try {
       const updated = await api.rides[action](rideId)
       setRide(updated as Ride)
-      if (action === 'end' || action === 'reject') {
+      if (action === 'reject') {
         navigate('/')
+      }
+      if (action === 'end') {
+        // Show rating modal; navigate after it's dismissed
+        const ratedKey = `driver_rated_${rideId}`
+        if (!localStorage.getItem(ratedKey)) {
+          setShowRating(true)
+        } else {
+          navigate('/')
+        }
       }
     } catch (e) {
       setError((e as Error).message)
@@ -81,6 +97,18 @@ export default function ActiveRide() {
 
   return (
     <div className="page">
+      {/* Rating modal — shown once when ride ends */}
+      {showRating && rideId && (
+        <RatingModal
+          rideId={rideId}
+          onDone={() => {
+            localStorage.setItem(`driver_rated_${rideId}`, '1')
+            setShowRating(false)
+            navigate('/')
+          }}
+        />
+      )}
+
       <div style={{ display: 'flex', alignItems: 'center', padding: '1rem', borderBottom: '1px solid var(--border)' }}>
         <button onClick={() => navigate('/')} style={{ color: 'var(--text-secondary)', marginRight: '1rem' }}>
           ←
@@ -89,6 +117,17 @@ export default function ActiveRide() {
       </div>
 
       <div className="page-content slide-in">
+        {/* Live map */}
+        <RideMap
+          pickupLat={ride.pickup_lat}
+          pickupLng={ride.pickup_lng}
+          dropoffLat={ride.dropoff_lat}
+          dropoffLng={ride.dropoff_lng}
+          driverLat={driverLat}
+          driverLng={driverLng}
+          height="220px"
+        />
+
         <div className="card" style={{ marginBottom: '1rem' }}>
           <span className={`badge ${ride.status === 'in_progress' ? 'badge-green' : 'badge-blue'}`}>
             {statusLabel[ride.status] ?? ride.status}

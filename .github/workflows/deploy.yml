@@ -1,0 +1,50 @@
+name: Deploy — Production
+
+on:
+  push:
+    branches: [main]
+
+# Prevent concurrent deployments
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  # Only deploy after CI passes (runs in same push event)
+  deploy:
+    name: Deploy to server
+    runs-on: ubuntu-latest
+    needs: []           # CI workflow is separate; deploy triggers on main push
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            set -e
+            cd /root/rideos-platform
+
+            echo "→ Pulling latest code…"
+            git pull origin main
+
+            echo "→ Rebuilding changed services…"
+            docker compose -f infra/docker-compose.yml up -d --build \
+              --no-deps \
+              backend worker passenger-webapp driver-webapp admin-webapp
+
+            echo "→ Health check…"
+            sleep 8
+            curl -sf https://easytaxiisrael.com/api/health | python3 -c "
+            import sys, json
+            d = json.load(sys.stdin)
+            assert d.get('status') == 'ok', f'Health check failed: {d}'
+            print('Health OK:', d)
+            "
+
+            echo "→ Deploy complete ✓"

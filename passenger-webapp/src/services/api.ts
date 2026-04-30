@@ -185,6 +185,10 @@ export const api = {
     get:     (id: string) => request<Ride>('GET', `/rides/${id}`),
     cancel:  (id: string) => request<Ride>('POST', `/rides/${id}/cancel`),
     fare:    (id: string) => request<FareEstimate>('GET', `/rides/${id}/fare`),
+    rateDriver:    (id: string, payload: { score: number; comment?: string }) =>
+      request<unknown>('POST', `/rides/${id}/ratings/driver`, payload),
+    ratePassenger: (id: string, payload: { score: number; comment?: string }) =>
+      request<unknown>('POST', `/rides/${id}/ratings/passenger`, payload),
   },
   ai: {
     intelligence: () => request<{ surge_multiplier: string; demand_level: string }>('GET', '/ai/intelligence'),

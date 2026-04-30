@@ -103,6 +103,8 @@ export const api = {
     start: (id: string) => request<Ride>('POST', `/rides/${id}/start`),
     end: (id: string) => request<Ride>('POST', `/rides/${id}/end`),
     fare: (id: string) => request<FareEstimate>('GET', `/rides/${id}/fare`),
+    ratePassenger: (id: string, payload: { score: number; comment?: string }) =>
+      request<unknown>('POST', `/rides/${id}/ratings/passenger`, payload),
   },
 
   // ----- Tracking -----

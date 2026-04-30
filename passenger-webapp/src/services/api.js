@@ -106,6 +106,8 @@ export const api = {
         get: (id) => request('GET', `/rides/${id}`),
         cancel: (id) => request('POST', `/rides/${id}/cancel`),
         fare: (id) => request('GET', `/rides/${id}/fare`),
+        rateDriver: (id, payload) => request('POST', `/rides/${id}/ratings/driver`, payload),
+        ratePassenger: (id, payload) => request('POST', `/rides/${id}/ratings/passenger`, payload),
     },
     ai: {
         intelligence: () => request('GET', '/ai/intelligence'),

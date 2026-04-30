@@ -8,7 +8,7 @@
  *   - ToS inline checkbox behavior
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 
 // ─── Surge multiplier display logic ──────────────────────────────────────────
 

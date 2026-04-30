@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../services/api'
 import { RideWebSocket } from '../services/websocket'
 import type { Ride, FareEstimate, LocationPayload } from '../types'
+import RideMap from '../components/RideMap'
+import RatingModal from '../components/RatingModal'
 
 const STATUS_LABEL: Record<string, string> = {
   pending:     '⏳ Finding a driver…',
@@ -20,6 +22,7 @@ export default function ActiveRide() {
   const [fare, setFare] = useState<FareEstimate | null>(null)
   const [driverLoc, setDriverLoc] = useState<LocationPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [showRating, setShowRating] = useState(false)
   const wsRef = useRef<RideWebSocket | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -34,7 +37,12 @@ export default function ActiveRide() {
         setRide(r)
         if (r.status === 'completed' || r.status === 'cancelled') {
           clearInterval(pollRef.current!)
-          if (r.status === 'completed') api.rides.fare(rideId).then(setFare).catch(() => {})
+          if (r.status === 'completed') {
+            api.rides.fare(rideId).then(setFare).catch(() => {})
+            // Show rating modal once per ride
+            const ratedKey = `rated_${rideId}`
+            if (!localStorage.getItem(ratedKey)) setShowRating(true)
+          }
         }
       } catch { /* ignore */ }
     }, 5000)
@@ -61,6 +69,18 @@ export default function ActiveRide() {
 
   return (
     <div className="page">
+      {/* Rating modal — shown once on ride completion */}
+      {showRating && rideId && (
+        <RatingModal
+          rideId={rideId}
+          target="driver"
+          onDone={() => {
+            localStorage.setItem(`rated_${rideId}`, '1')
+            setShowRating(false)
+          }}
+        />
+      )}
+
       <div style={{ display: 'flex', alignItems: 'center', padding: '1rem', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)' }}>
         <button onClick={() => navigate('/')} style={{ color: 'var(--text-secondary)', marginRight: '1rem' }}>←</button>
         <h1 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Your Ride</h1>
@@ -73,6 +93,17 @@ export default function ActiveRide() {
           </div>
         ) : (
           <>
+            {/* Live map */}
+            <RideMap
+              pickupLat={ride.pickup_lat}
+              pickupLng={ride.pickup_lng}
+              dropoffLat={ride.dropoff_lat}
+              dropoffLng={ride.dropoff_lng}
+              driverLat={driverLoc?.lat}
+              driverLng={driverLoc?.lng}
+              height="240px"
+            />
+
             <div className="card" style={{ marginBottom: '1rem', textAlign: 'center' }}>
               <div style={{ fontSize: '2rem', marginBottom: '.5rem' }}>
                 {ride.status === 'in_progress' ? '🏎️' : ride.status === 'completed' ? '🏁' : ride.status === 'cancelled' ? '❌' : '🚗'}

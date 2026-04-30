@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import { api } from '../services/api'
 import type { FareEstimate, RideRequest } from '../types'
 import SurgeIndicator from '../components/SurgeIndicator'
+import RideMap from '../components/RideMap'
 
 // Default to Tel Aviv center
 const DEFAULT_COORDS = { lat: 32.0853, lng: 34.7818 }
@@ -358,50 +359,21 @@ export default function RequestRide() {
         </div>
       </div>
 
-      {/* ── Map (70% of remaining height) ── */}
+      {/* ── Map ── */}
       <div
         className="map-fullscreen"
         style={{ flex: '0 0 38vh', minHeight: 180, position: 'relative' }}
       >
-        {/* Map background grid pattern */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          background: `
-            linear-gradient(rgba(255,215,0,.03) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,215,0,.03) 1px, transparent 1px),
-            linear-gradient(180deg, #1a2a1a 0%, #1e2e1e 100%)
-          `,
-          backgroundSize: '40px 40px, 40px 40px, 100% 100%',
-        }} />
-        {/* Searching ripple animation */}
-        <div style={{
-          position: 'absolute', top: '45%', left: '50%',
-          transform: 'translate(-50%, -50%)',
-          textAlign: 'center',
-        }}>
-          {/* Ripple rings */}
-          {[0, 0.5, 1].map(delay => (
-            <div key={delay} style={{
-              position: 'absolute', top: '50%', left: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: 60, height: 60,
-              borderRadius: '50%',
-              border: '2px solid rgba(255,215,0,0.5)',
-              animation: `ripple 2s ease-out ${delay}s infinite`,
-            }} />
-          ))}
-          <div style={{ position: 'relative', fontSize: '2.5rem', filter: 'drop-shadow(0 0 12px rgba(255,215,0,.6))' }} className="taxi-bounce">🚕</div>
-        </div>
-        {/* Location pin */}
-        <div style={{
-          position: 'absolute', bottom: '30%', left: '55%',
-          transform: 'translate(-50%, 0)',
-          fontSize: '1.75rem',
-          filter: 'drop-shadow(0 2px 8px rgba(0,0,0,.8))',
-        }}>📍</div>
-        {/* Surge badge overlay — only show when multiplier is a valid number > 1 */}
+        <RideMap
+          pickupLat={pickup.lat}
+          pickupLng={pickup.lng}
+          dropoffLat={dropoff.lat}
+          dropoffLng={dropoff.lng}
+          height="100%"
+        />
+        {/* Surge badge overlay */}
         {surge && !isNaN(parseFloat(surge.surge_multiplier)) && parseFloat(surge.surge_multiplier) > 1 && (
-          <div style={{ position: 'absolute', top: '1rem', right: '1rem' }}>
+          <div style={{ position: 'absolute', top: '1rem', right: '1rem', zIndex: 800 }}>
             <SurgeIndicator surge={surge} />
           </div>
         )}
@@ -412,18 +384,12 @@ export default function RequestRide() {
             background: 'rgba(26,26,26,.85)', color: 'var(--accent)',
             padding: '.4rem .9rem', borderRadius: 20, fontSize: '.8rem', fontWeight: 600,
             backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', gap: '.5rem',
+            zIndex: 800,
           }}>
             <span className="spinner" style={{ width: 12, height: 12, border: '2px solid var(--accent)', borderTopColor: 'transparent' }} />
             מאתר מיקום…
           </div>
         )}
-        {/* Map label */}
-        <div style={{
-          position: 'absolute', bottom: '1rem', right: '1rem',
-          fontSize: '.7rem', color: 'rgba(255,255,255,.3)',
-        }}>
-          {pickup.lat.toFixed(4)}, {pickup.lng.toFixed(4)}
-        </div>
       </div>
 
       {/* ── Bottom sheet (booking panel) ── */}

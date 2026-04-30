@@ -75,6 +75,7 @@ export const api = {
         start: (id) => request('POST', `/rides/${id}/start`),
         end: (id) => request('POST', `/rides/${id}/end`),
         fare: (id) => request('GET', `/rides/${id}/fare`),
+        ratePassenger: (id, payload) => request('POST', `/rides/${id}/ratings/passenger`, payload),
     },
     // ----- Tracking -----
     tracking: {
