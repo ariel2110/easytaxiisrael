@@ -1,8 +1,6 @@
 import { NavLink } from 'react-router-dom'
-import type { AdminUser } from '../types'
 
 interface Props {
-  user: AdminUser
   onLogout: () => void
 }
 
@@ -12,10 +10,15 @@ const NAV = [
   { to: '/admin/users',   label: 'משתמשים', icon: '👥', end: false },
   { to: '/admin/rides',   label: 'נסיעות',  icon: '🛣️', end: false },
   { to: '/admin/audit',   label: 'יומן',    icon: '📋', end: false },
+  { to: '/admin/sumsub',  label: 'KYC',     icon: '🪪', end: false },
   { to: '/admin/ai-agents', label: 'סוכני AI', icon: '🤖', end: false },
 ]
 
-export default function Sidebar({ user, onLogout }: Props) {
+const NAV_EXTERNAL = [
+  { href: '/whatsapp-setup.html?key=e78a16747d74f1074e2c590d0cc4a074db43b4bc90ac19e2', label: 'WhatsApp', icon: '💬' },
+]
+
+export default function Sidebar({ onLogout }: Props) {
   return (
     <aside className="sidebar">
       {/* Logo */}
@@ -48,12 +51,37 @@ export default function Sidebar({ user, onLogout }: Props) {
             <span>{item.label}</span>
           </NavLink>
         ))}
+
+        <div style={{ height: '1px', background: 'var(--border)', margin: '0.5rem 1rem' }} />
+
+        {NAV_EXTERNAL.map(item => (
+          <a
+            key={item.label}
+            href={item.href}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.65rem',
+              padding: '0.65rem 1rem',
+              fontSize: '0.9rem',
+              fontWeight: 400,
+              color: 'var(--text-secondary)',
+              background: 'transparent',
+              borderRight: '3px solid transparent',
+              transition: 'all 0.15s',
+              textDecoration: 'none',
+            }}
+          >
+            <span>{item.icon}</span>
+            <span>{item.label}</span>
+          </a>
+        ))}
       </nav>
 
       {/* User */}
       <div style={{ padding: '1rem', borderTop: '1px solid var(--border)' }}>
-        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {user.phone}
+        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+          מנהל מערכת
         </div>
         <button
           className="btn btn-ghost"
@@ -66,3 +94,5 @@ export default function Sidebar({ user, onLogout }: Props) {
     </aside>
   )
 }
+
+

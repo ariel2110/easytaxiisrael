@@ -48,7 +48,11 @@ class Settings(BaseSettings):
     # Users send auth messages TO this number.
     WHATSAPP_PLATFORM_PHONE: str = "972546363350"
 
-    # Persona KYC (https://withpersona.com)
+    # Sumsub KYC (https://sumsub.com) — replaces Persona
+    SUMSUB_APP_TOKEN: str = ""
+    SUMSUB_SECRET_KEY: str = ""
+
+    # Persona KYC (https://withpersona.com) — legacy, kept for existing inquiries
     PERSONA_API_KEY: str = ""
     PERSONA_WEBHOOK_SECRET: str = ""
     PERSONA_TEMPLATE_ID: str = ""                    # Template 1: GovID (ת"ז) + Driver License + Selfie (liveness video)

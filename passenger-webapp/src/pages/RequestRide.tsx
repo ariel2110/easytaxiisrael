@@ -11,7 +11,7 @@ const DEFAULT_COORDS = { lat: 32.0853, lng: 34.7818 }
 const TOS_KEY = 'easytaxi_tos_v1'
 
 // ─── Terms of Service Modal ─────────────────────────────────────────────────
-function TosModal({ onAccept, onClose }: { onAccept: () => void; onClose: () => void }) {
+function TosModal({ onAccept }: { onAccept: () => void }) {
   const [scrolled, setScrolled] = useState(false)
   const [accepted, setAccepted] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -166,17 +166,9 @@ function TosModal({ onAccept, onClose }: { onAccept: () => void; onClose: () => 
               >
                 {scrolled ? '✅ אני מסכים/ה לתנאי השימוש' : '⟵ קרא את התנאים עד הסוף'}
               </button>
-              <button
-                onClick={onClose}
-                style={{
-                  width: '100%', padding: '11px',
-                  background: 'transparent', border: '1px solid rgba(255,255,255,.08)',
-                  borderRadius: 12, color: '#64748B', fontWeight: 600, fontSize: '.88rem',
-                  cursor: 'pointer',
-                }}
-              >
-                סגור — אחר כך
-              </button>
+              <div style={{ textAlign: 'center', fontSize: '.72rem', color: '#475569', marginTop: 4 }}>
+                לא ניתן להזמין נסיעה ללא אישור תנאי השימוש
+              </div>
             </>
           )}
         </div>
@@ -211,6 +203,7 @@ export default function RequestRide() {
   const navigate = useNavigate()
 
   const [tosAccepted, setTosAccepted] = useState(() => localStorage.getItem(TOS_KEY) === '1')
+  // Modal always shows on load if not accepted, and whenever user tries to book
   const [showTos, setShowTos] = useState(() => localStorage.getItem(TOS_KEY) !== '1')
 
   function acceptTos() {
@@ -316,7 +309,6 @@ export default function RequestRide() {
       {showTos && (
         <TosModal
           onAccept={acceptTos}
-          onClose={() => setShowTos(false)}
         />
       )}
 
@@ -369,7 +361,7 @@ export default function RequestRide() {
       {/* ── Map (70% of remaining height) ── */}
       <div
         className="map-fullscreen"
-        style={{ flex: '0 0 65vh', position: 'relative' }}
+        style={{ flex: '0 0 38vh', minHeight: 180, position: 'relative' }}
       >
         {/* Map background grid pattern */}
         <div style={{
@@ -381,13 +373,24 @@ export default function RequestRide() {
           `,
           backgroundSize: '40px 40px, 40px 40px, 100% 100%',
         }} />
-        {/* Taxi dot on map */}
+        {/* Searching ripple animation */}
         <div style={{
-          position: 'absolute', top: '38%', left: '50%',
+          position: 'absolute', top: '45%', left: '50%',
           transform: 'translate(-50%, -50%)',
           textAlign: 'center',
         }}>
-          <div style={{ fontSize: '2.5rem', filter: 'drop-shadow(0 0 12px rgba(255,215,0,.6))' }} className="taxi-bounce">🚕</div>
+          {/* Ripple rings */}
+          {[0, 0.5, 1].map(delay => (
+            <div key={delay} style={{
+              position: 'absolute', top: '50%', left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: 60, height: 60,
+              borderRadius: '50%',
+              border: '2px solid rgba(255,215,0,0.5)',
+              animation: `ripple 2s ease-out ${delay}s infinite`,
+            }} />
+          ))}
+          <div style={{ position: 'relative', fontSize: '2.5rem', filter: 'drop-shadow(0 0 12px rgba(255,215,0,.6))' }} className="taxi-bounce">🚕</div>
         </div>
         {/* Location pin */}
         <div style={{
@@ -396,8 +399,8 @@ export default function RequestRide() {
           fontSize: '1.75rem',
           filter: 'drop-shadow(0 2px 8px rgba(0,0,0,.8))',
         }}>📍</div>
-        {/* Surge badge overlay */}
-        {surge && (
+        {/* Surge badge overlay — only show when multiplier is a valid number > 1 */}
+        {surge && !isNaN(parseFloat(surge.surge_multiplier)) && parseFloat(surge.surge_multiplier) > 1 && (
           <div style={{ position: 'absolute', top: '1rem', right: '1rem' }}>
             <SurgeIndicator surge={surge} />
           </div>
@@ -551,33 +554,27 @@ export default function RequestRide() {
             borderRadius: 14,
             direction: 'rtl',
           }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
-              <span style={{ fontSize: '1.25rem', flexShrink: 0, marginTop: 1 }}>⚠️</span>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                onChange={e => { if (e.target.checked) acceptTos() }}
+                style={{ marginTop: 3, width: 18, height: 18, accentColor: '#F59E0B', flexShrink: 0 }}
+              />
               <div>
-                <div style={{ fontWeight: 800, color: '#F59E0B', fontSize: '.9rem', marginBottom: 3 }}>
-                  You must accept the Terms of Service before requesting a ride
+                <div style={{ fontWeight: 700, color: '#F59E0B', fontSize: '.88rem', marginBottom: 2 }}>
+                  קראתי ומסכים לתנאי השימוש
                 </div>
-                <div style={{ fontSize: '.78rem', color: '#94A3B8', lineHeight: 1.5 }}>
-                  נדרשת הסכמה לתנאי השימוש לפני הזמנת נסיעה. קרא ואשר כדי לבטל נעילה זו.
+                <div style={{ fontSize: '.75rem', color: '#94A3B8', lineHeight: 1.5 }}>
+                  נדרשת הסכמה לפני הזמנת נסיעה.{' '}
+                  <span
+                    style={{ textDecoration: 'underline', cursor: 'pointer' }}
+                    onClick={e => { e.preventDefault(); setShowTos(true) }}
+                  >
+                    קרא את התנאים
+                  </span>
                 </div>
               </div>
-            </div>
-            <button
-              onClick={() => setShowTos(true)}
-              style={{
-                width: '100%', padding: '11px',
-                background: 'linear-gradient(135deg,#F59E0B,#D97706)',
-                border: 'none', borderRadius: 11,
-                color: '#0F172A', fontWeight: 800, fontSize: '.9rem',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                boxShadow: '0 4px 14px rgba(245,158,11,.35)',
-                transition: 'transform .15s, box-shadow .15s',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 6px 18px rgba(245,158,11,.5)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'none'; (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 4px 14px rgba(245,158,11,.35)' }}
-            >
-              📋 קרא והסכם לתנאי השימוש
-            </button>
+            </label>
           </div>
         )}
 
@@ -592,7 +589,7 @@ export default function RequestRide() {
             filter: tosAccepted ? 'none' : 'grayscale(0.4)',
             transition: 'opacity .3s, filter .3s',
           }}
-          disabled={busy || !tosAccepted}
+          disabled={busy}
           onClick={tosAccepted ? requestRide : () => setShowTos(true)}
         >
           {busy

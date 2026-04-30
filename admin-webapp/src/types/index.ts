@@ -67,6 +67,14 @@ export interface AIKeyUpdateResponse {
   key_masked: string
 }
 
+export interface AIChatHistory {
+  id: string
+  timestamp: string
+  message: string
+  reply: string
+  model: string
+}
+
 export interface AuditLog {
   id: string
   actor_id: string | null
@@ -76,4 +84,39 @@ export interface AuditLog {
   ip_address: string | null
   detail: string | null
   created_at: string
+}
+
+export interface VehicleCheckResult {
+  found: boolean
+  is_active: boolean
+  is_removed: boolean
+  is_taxi: boolean
+  manufacturer?: string | null
+  model?: string | null
+  color?: string | null
+  year?: string | null
+  ownership?: string | null
+  test_expiry?: string | null
+  last_test_date?: string | null
+  chassis?: string | null
+  fuel_type?: string | null
+  warnings: string[]
+  message?: string
+}
+
+export interface SumsubApplicant {
+  id: string
+  driver_id: string
+  sumsub_applicant_id: string
+  level_name: string
+  status: string
+  review_result: string | null
+  reject_labels: string[] | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SumsubApplicantsResponse {
+  total: number
+  applicants: SumsubApplicant[]
 }

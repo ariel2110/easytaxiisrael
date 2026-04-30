@@ -8,19 +8,20 @@ import Drivers from './pages/Drivers'
 import Rides from './pages/Rides'
 import AuditLogs from './pages/AuditLogs'
 import AIAgents from './pages/AIAgents'
+import KYCVerification from './pages/KYCVerification'
+import SumsubApplicants from './pages/SumsubApplicants'
+import WhatsApp from './pages/WhatsApp'
 
 function AdminLayout() {
-  const { user, logout } = useAuth()
-
-  if (!user) return <Navigate to="/admin/login" replace />
+  const { logout } = useAuth()
 
   return (
     <div className="admin-layout">
-      <Sidebar user={user} onLogout={logout} />
+      <Sidebar onLogout={logout} />
       <div className="main-area">
         <div className="topbar">
           <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-            שלום, {user.phone}
+            EasyTaxi Admin
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
             <span className="badge badge-yellow">אדמין</span>
@@ -34,6 +35,7 @@ function AdminLayout() {
             <Route path="rides" element={<Rides />} />
             <Route path="audit" element={<AuditLogs />} />
             <Route path="ai-agents" element={<AIAgents />} />
+            <Route path="sumsub" element={<SumsubApplicants />} />
             <Route path="*" element={<Navigate to="/admin/" replace />} />
           </Routes>
         </div>
@@ -54,6 +56,7 @@ export default function App() {
       <Routes>
         <Route path="/admin/login" element={<LoginGuard />} />
         <Route path="/admin/*" element={<AdminLayout />} />
+        <Route path="/verify" element={<KYCVerification />} />
         <Route path="*" element={<Navigate to="/admin/" replace />} />
       </Routes>
     </BrowserRouter>

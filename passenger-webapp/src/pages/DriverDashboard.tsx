@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { api } from '../services/api'
 import type { ComplianceProfile, DocumentRead } from '../services/api'
@@ -15,7 +15,7 @@ const DOC_META: Record<DocType, DocMeta> = {
   background_check:     { label: 'אישור יושרה',     icon: '✅', desc: 'אישור משטרה / יושרה עדכני',          needsExpiry: true },
   vehicle_inspection:   { label: 'טסט רכב',         icon: '🔧', desc: 'תעודת טסט (רשיון רכב) בתוקף',       needsExpiry: true },
 }
-const DOC_ORDER: DocType[] = ['drivers_license','vehicle_registration','vehicle_insurance','background_check','vehicle_inspection']
+const DOC_ORDER: DocType[] = ['vehicle_registration','vehicle_insurance','background_check','vehicle_inspection']
 
 // ── CSS ────────────────────────────────────────────────────────────────────
 const CSS = `
@@ -103,6 +103,26 @@ const CSS = `
 .dd-stat{text-align:center;padding:12px 8px;background:rgba(255,255,255,.04);border-radius:12px;}
 .dd-stat-n{font-size:1.4rem;font-weight:900;color:var(--bluel);}
 .dd-stat-l{font-size:.68rem;color:var(--muted);margin-top:3px;}
+.dd-id-card{background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.25);border-radius:14px;padding:16px;margin-top:12px;}
+.dd-id-card-title{font-size:.78rem;font-weight:700;color:#22C55E;letter-spacing:.5px;margin-bottom:12px;display:flex;align-items:center;gap:6px;}
+.dd-id-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.dd-id-field{background:rgba(255,255,255,.04);border-radius:10px;padding:10px 12px;}
+.dd-id-label{font-size:.68rem;color:var(--muted);margin-bottom:3px;}
+.dd-id-value{font-size:.88rem;font-weight:700;color:var(--white);}
+.dd-step-done{display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(34,197,94,.08);
+  border:1px solid rgba(34,197,94,.25);border-radius:12px;margin-bottom:10px;
+  font-size:.88rem;font-weight:700;color:#22C55E;}
+.dd-step-pending{display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(245,158,11,.07);
+  border:1px solid rgba(245,158,11,.2);border-radius:12px;margin-bottom:10px;
+  font-size:.88rem;font-weight:700;color:#F59E0B;}
+.dd-btn-red{background:linear-gradient(135deg,#DC2626,#B91C1C);color:#fff;box-shadow:0 4px 14px rgba(220,38,38,.3);}
+.dd-btn-red:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 7px 20px rgba(220,38,38,.5);}
+.dd-modal-overlay{position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);
+  display:flex;align-items:center;justify-content:center;padding:20px;}
+.dd-modal{background:#0F172A;border:1px solid rgba(239,68,68,.3);border-radius:20px;padding:28px;max-width:400px;width:100%;}
+.dd-modal-title{font-size:1.1rem;font-weight:900;color:#EF4444;margin-bottom:10px;text-align:center;}
+.dd-modal-body{font-size:.88rem;color:var(--muted);line-height:1.7;text-align:center;margin-bottom:20px;}
+.dd-modal-actions{display:flex;gap:10px;flex-direction:column;}
 @keyframes ddIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
 .dd-ain{animation:ddIn .4s ease both;}
 .dd-d1{animation-delay:.08s}.dd-d2{animation-delay:.15s}.dd-d3{animation-delay:.23s}
@@ -114,8 +134,8 @@ function authStatusInfo(s: string) {
   const map: Record<string,{label:string;color:string;bg:string;icon:string}> = {
     pending:             {label:'לא מאומת',    color:'#F59E0B',bg:'rgba(245,158,11,.12)',icon:'⚠️'},
     whatsapp_verified:   {label:'WA אומת',      color:'#60A5FA',bg:'rgba(96,165,250,.10)',icon:'✅'},
-    persona_in_progress: {label:'KYC בתהליך',  color:'#A78BFA',bg:'rgba(167,139,250,.10)',icon:'🔄'},
-    persona_completed:   {label:'ממתין לאישור', color:'#FB923C',bg:'rgba(251,146,60,.10)',icon:'⏳'},
+    persona_in_progress: {label:'Sumsub בתהליך', color:'#A78BFA',bg:'rgba(167,139,250,.10)',icon:'🔄'},
+    persona_completed:   {label:'ממתין לאישור',  color:'#FB923C',bg:'rgba(251,146,60,.10)',icon:'⏳'},
     approved:            {label:'מאושר ✓',      color:'#22C55E',bg:'rgba(34,197,94,.12)',icon:'🏆'},
   }
   return map[s] ?? {label:s,color:'#94A3B8',bg:'rgba(148,163,184,.1)',icon:'❓'}
@@ -203,17 +223,25 @@ function DocCard({ type, doc, onUploaded }: { type: DocType; doc: DocumentRead|u
 // ── Main ──────────────────────────────────────────────────────────────────
 type Tab = 'home' | 'verify'
 
+type SumsubMyData = { status: string; review_result: string|null; level_name: string|null; auth_status: string; full_name: string|null; extracted: { first_name: string|null; last_name: string|null; date_of_birth: string|null; id_number: string|null; id_expiry: string|null; issuing_country: string|null; license_number: string|null; license_class: string|null; gov_id_passed: boolean; selfie_passed: boolean } }
+
 export default function DriverDashboard() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const [tab, setTab] = useState<Tab>('home')
-  const [kycUrl, setKycUrl] = useState<string|null>(() => localStorage.getItem('kyc_url'))
+  const [searchParams] = useSearchParams()
+  const [tab, setTab] = useState<Tab>(() => searchParams.get('tab') === 'verify' ? 'verify' : 'home')
   const [authStatus, setAuthStatus] = useState<string>(user?.auth_status ?? 'pending')
+  const [kycStatus, setKycStatus] = useState<string>('not_started')
   const [profile, setProfile] = useState<ComplianceProfile|null>(null)
   const [docs, setDocs] = useState<DocumentRead[]>([])
-  const [fullName, setFullName] = useState(user?.full_name ?? '')
-  const [savingProfile, setSavingProfile] = useState(false)
-  const [profileSaved, setProfileSaved] = useState(false)
+  const [sumsubData, setSumsubData] = useState<SumsubMyData|null>(null)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deleteMsg, setDeleteMsg] = useState('')
+  const [vehicleNumber, setVehicleNumber] = useState('')
+  const [vehicleResult, setVehicleResult] = useState<null | { found: boolean; is_active: boolean; is_removed: boolean; is_taxi: boolean; manufacturer?: string; model?: string; color?: string; year?: string; test_expiry?: string; warnings: string[] }>(null)
+  const [vehicleBusy, setVehicleBusy] = useState(false)
+  const [vehicleErr, setVehicleErr] = useState<string | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval>|null>(null)
 
   useEffect(() => {
@@ -237,16 +265,32 @@ export default function DriverDashboard() {
         const d: KycData = await api.auth.driverKycStatus()
         const s = d.auth_status || d.kyc_status
         setAuthStatus(s)
-        if (d.kyc_url) { setKycUrl(d.kyc_url); localStorage.setItem('kyc_url', d.kyc_url) }
+        const ks = d.kyc_status
+        setKycStatus(ks)
+        // Once we get a real status from server, clear the submitted flag
+        if (ks !== 'init' && ks !== 'not_started') {
+          localStorage.removeItem('sumsub_submitted')
+        }
         if (s === 'approved') { if (pollRef.current) clearInterval(pollRef.current) }
       } catch { /* ignore */ }
     }
     poll()
-    pollRef.current = setInterval(poll, 15000)
+    pollRef.current = setInterval(poll, 10000)
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [])
 
-  useEffect(() => { if (tab === 'verify') loadCompliance() }, [tab, loadCompliance])
+  useEffect(() => {
+    if (tab === 'verify') {
+      loadCompliance()
+      api.sumsub.getMyData().then(setSumsubData).catch(() => null)
+    }
+  }, [tab, loadCompliance])
+
+  // If user just returned from Sumsub and flag is set, treat as pending locally
+  const effectiveKycStatus =
+    (kycStatus === 'init' || kycStatus === 'not_started') && localStorage.getItem('sumsub_submitted')
+      ? 'pending'
+      : kycStatus
 
   const st = authStatusInfo(authStatus)
   const isApproved = authStatus === 'approved'
@@ -257,87 +301,21 @@ export default function DriverDashboard() {
     return docs.filter(d=>d.document_type===type).sort((a,b)=>new Date(b.uploaded_at).getTime()-new Date(a.uploaded_at).getTime())[0]
   }
 
-  async function handleSaveProfile() {
-    if (!fullName.trim()) return
-    setSavingProfile(true)
-    try { await api.auth.updateProfile({full_name: fullName.trim()}); setProfileSaved(true); setTimeout(()=>setProfileSaved(false),3000) }
-    catch { /* ignore */ }
-    finally { setSavingProfile(false) }
+  async function handleDeleteRequest() {
+    setDeleteLoading(true)
+    try {
+      const r = await api.auth.deleteRequest()
+      setDeleteMsg(r.message)
+      setTimeout(() => { logout(); navigate('/login?role=driver', {replace:true}) }, 4000)
+    } catch { setDeleteMsg('שגיאה בשליחת הבקשה. נסה שוב.') }
+    finally { setDeleteLoading(false) }
   }
-
-  const [kycLoading, setKycLoading] = useState(false)
 
   function handleLogout() { logout(); navigate('/login?role=driver', {replace:true}) }
 
-  function handleStartKyc() {
-    if (!kycUrl || kycLoading) return
-
-    let inquiryId: string | null = null
-    let sessionToken: string | null = null
-    try {
-      const parsed = new URL(kycUrl)
-      inquiryId = parsed.searchParams.get('inquiry-id')
-      sessionToken = parsed.searchParams.get('session-token')
-    } catch { /* ignore */ }
-
-    if (!inquiryId) {
-      window.location.href = kycUrl
-      return
-    }
-
-    setKycLoading(true)
-    const iid = inquiryId
-    const stok = sessionToken
-
-    function openClient() {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const P = (window as any).Persona
-      if (!P?.Client) {
-        setKycLoading(false)
-        window.location.href = kycUrl!
-        return
-      }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const cfg: Record<string, any> = {
-        inquiryId: iid,
-        onReady: () => { setKycLoading(false); client.open() },
-        onComplete: () => { window.location.reload() },
-        onCancel: () => { setKycLoading(false) },
-        onError: () => { setKycLoading(false); window.location.href = kycUrl! },
-      }
-      if (stok) cfg.sessionToken = stok
-      const client = new P.Client(cfg)
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((window as any).Persona?.Client) { openClient(); return }
-
-    if (document.getElementById('persona-sdk')) {
-      document.getElementById('persona-sdk')!.addEventListener('load', openClient, { once: true })
-      return
-    }
-    const s = document.createElement('script')
-    s.id = 'persona-sdk'
-    s.src = 'https://cdn.withpersona.com/dist/persona-v5-latest.js'
-    s.addEventListener('load', openClient, { once: true })
-    s.addEventListener('error', () => { setKycLoading(false); window.location.href = kycUrl! }, { once: true })
-    document.head.appendChild(s)
-  }
-
-
   return (
     <div className="dd">
-      {/* ── Persona SDK loading overlay ── */}
-      {kycLoading && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(7,11,20,0.96)',
-        }}>
-          <div style={{ width: 48, height: 48, border: '4px solid rgba(255,255,255,.1)', borderTopColor: '#7C3AED', borderRadius: '50%', animation: 'ddSpin 1s linear infinite' }} />
-          <p style={{ marginTop: 20, color: '#94A3B8', fontFamily: 'Heebo,sans-serif', fontSize: '0.95rem' }}>טוען אימות זהות…</p>
-        </div>
-      )}
+
       <div className="dd-bg" />
       <div className="dd-hdr">
         <div className="dd-logo">🚕 Easy<span style={{color:'#FDE047'}}>Taxi</span> — נהגים</div>
@@ -411,41 +389,144 @@ export default function DriverDashboard() {
             )}
           </div>
 
-          {/* Step 1: Persona */}
+          {/* Step 1: Sumsub */}
           <div className="dd-sec dd-ain dd-d1">
-            <div className="dd-sec-title">שלב 1 — אימות זהות (Persona)</div>
-            <p style={{fontSize:'.88rem',color:'var(--muted)',marginBottom:14,lineHeight:1.6}}>
-              אמת את זהותך עם תעודת זהות / דרכון + סלפי חי. פעולה חד-פעמית, לוקחת כ-3 דקות.
-            </p>
-            {kycUrl ? (
-              <button
-                className="dd-btn dd-btn-purple"
-                onClick={handleStartKyc}
-                disabled={kycLoading}
-              >
-                🪪 {kycLoading ? 'טוען…' : authStatus==='persona_in_progress' ? 'המשך אימות Persona' : 'התחל אימות Persona'}
-              </button>
-            ) : (
-              <div className="dd-info">⏳ טוען קישור Persona… אם לא נטען, צא והיכנס מחדש.</div>
+            <div className="dd-sec-title">שלב 1 — אימות זהות (Sumsub)</div>
+
+            {/* Status indicator */}
+            {(effectiveKycStatus === 'completed' || authStatus === 'persona_completed' || authStatus === 'approved') ? (
+              <div className="dd-step-done">✅ אימות זהות הושלם בהצלחה</div>
+            ) : effectiveKycStatus === 'pending' ? (
+              <div className="dd-step-pending">
+                ⏳ המסמכים הוגשו — ממתינים לאישור Sumsub
+                <span style={{display:'block',fontSize:'.78rem',fontWeight:400,marginTop:4,color:'#FDE68A'}}>
+                  בדרך כלל לוקח עד מספר דקות. הדף יתרענן אוטומטית.
+                </span>
+              </div>
+            ) : effectiveKycStatus === 'rejected' ? (
+              <div className="dd-err" style={{marginBottom:10}}>❌ אימות נדחה — {sumsubData?.review_result === 'RED' ? 'בעיה במסמכים. ניתן לנסות שוב.' : 'פנה לתמיכה'}</div>
+            ) : effectiveKycStatus === 'on_hold' ? (
+              <div className="dd-step-pending">🔒 האימות הועבר לבדיקה ידנית — נחזור אליך בקרוב</div>
+            ) : null}
+
+            {/* Start / retry button — always visible unless fully approved */}
+            {authStatus !== 'approved' && (
+              <>
+                {(effectiveKycStatus === 'not_started' || effectiveKycStatus === 'init') && (
+                  <p style={{fontSize:'.88rem',color:'var(--muted)',marginBottom:14,lineHeight:1.6}}>
+                    אמת את זהותך עם תעודת זהות / דרכון + סלפי חי. לוקחת כ-3 דקות.
+                  </p>
+                )}
+                <button
+                  className={`dd-btn ${effectiveKycStatus === 'rejected' ? 'dd-btn-blue' : 'dd-btn-purple'}`}
+                  style={{marginTop: effectiveKycStatus === 'pending' || effectiveKycStatus === 'on_hold' ? 12 : 0}}
+                  onClick={() => navigate('/verify')}
+                >
+                  {effectiveKycStatus === 'rejected'
+                    ? '🔄 נסה שוב — פתח אימות מחדש'
+                    : effectiveKycStatus === 'pending'
+                    ? '🔍 פתח את תהליך האימות שוב'
+                    : effectiveKycStatus === 'on_hold'
+                    ? '📋 פתח תהליך האימות לבדיקה'
+                    : effectiveKycStatus === 'init'
+                    ? '🪪 המשך אימות Sumsub'
+                    : '🪪 התחל אימות Sumsub'}
+                </button>
+              </>
             )}
-            <div className="dd-info">🛡️ Persona · ISO 27001 · SOC 2 Type II — הנתונים מועברים ישירות ל-Persona.</div>
+
+            {/* Verified data card */}
+            {sumsubData && sumsubData.extracted && (sumsubData.extracted.first_name || sumsubData.extracted.id_number) && (
+              <div className="dd-id-card">
+                <div className="dd-id-card-title">🪪 פרטים שנאספו מ-Sumsub</div>
+                <div className="dd-id-grid">
+                  {sumsubData.extracted.first_name && (
+                    <div className="dd-id-field"><div className="dd-id-label">שם פרטי</div><div className="dd-id-value">{sumsubData.extracted.first_name}</div></div>
+                  )}
+                  {sumsubData.extracted.last_name && (
+                    <div className="dd-id-field"><div className="dd-id-label">שם משפחה</div><div className="dd-id-value">{sumsubData.extracted.last_name}</div></div>
+                  )}
+                  {sumsubData.extracted.date_of_birth && (
+                    <div className="dd-id-field"><div className="dd-id-label">תאריך לידה</div><div className="dd-id-value">{sumsubData.extracted.date_of_birth}</div></div>
+                  )}
+                  {sumsubData.extracted.id_number && (
+                    <div className="dd-id-field"><div className="dd-id-label">מספר רישיון נהיגה</div><div className="dd-id-value">{sumsubData.extracted.id_number}</div></div>
+                  )}
+                  {sumsubData.extracted.id_expiry && (
+                    <div className="dd-id-field"><div className="dd-id-label">תוקף תעודה</div><div className="dd-id-value">{sumsubData.extracted.id_expiry}</div></div>
+                  )}
+                  {sumsubData.extracted.issuing_country && (
+                    <div className="dd-id-field"><div className="dd-id-label">מדינה מנפיקה</div><div className="dd-id-value">{sumsubData.extracted.issuing_country}</div></div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="dd-info">🛡️ Sumsub · ISO 27001 · SOC 2 Type II — הנתונים מועברים ישירות ל-Sumsub.</div>
           </div>
 
-          {/* Step 2: Profile */}
-          <div className="dd-sec dd-ain dd-d2">
-            <div className="dd-sec-title">שלב 2 — פרטים אישיים</div>
+          {/* Step 1.5: Vehicle Number */}
+          <div className="dd-sec dd-ain" style={{animationDelay:'.12s'}}>
+            <div className="dd-sec-title">רישום רכב — אימות מול מאגר הממשלה</div>
             <div className="dd-field-row">
-              <label className="dd-field-label">שם מלא</label>
-              <input className="dd-field-input" placeholder="ישראל ישראלי" value={fullName} onChange={e=>setFullName(e.target.value)} />
+              <label className="dd-field-label">מספר לוחית רישוי (לדוגמה: 12-345-67)</label>
+              <div style={{display:'flex',gap:8}}>
+                <input
+                  className="dd-field-input"
+                  placeholder="12-345-67"
+                  value={vehicleNumber}
+                  onChange={e => setVehicleNumber(e.target.value)}
+                  style={{flex:1}}
+                  maxLength={10}
+                  dir="ltr"
+                />
+                <button
+                  className="dd-btn dd-btn-blue"
+                  style={{width:'auto',padding:'0 18px',minWidth:90}}
+                  disabled={vehicleBusy || vehicleNumber.length < 5}
+                  onClick={async () => {
+                    setVehicleBusy(true); setVehicleErr(null); setVehicleResult(null)
+                    try {
+                      const r = await api.vehicle.check(vehicleNumber.replace(/-/g,''))
+                      setVehicleResult(r)
+                    } catch(e) { setVehicleErr((e as Error).message) }
+                    finally { setVehicleBusy(false) }
+                  }}
+                >
+                  {vehicleBusy ? '⏳' : '🔍 בדוק'}
+                </button>
+              </div>
             </div>
-            <button className="dd-btn dd-btn-blue" onClick={handleSaveProfile} disabled={savingProfile||!fullName.trim()}>
-              {profileSaved ? '✅ נשמר!' : savingProfile ? '⏳ שומר…' : '💾 שמור פרטים'}
-            </button>
+            {vehicleErr && <div className="dd-err">{vehicleErr}</div>}
+            {vehicleResult && (
+              vehicleResult.found ? (
+                <div style={{background:'rgba(34,197,94,.07)',border:'1px solid rgba(34,197,94,.25)',borderRadius:12,padding:'14px 16px',marginTop:10}}>
+                  <div style={{fontWeight:700,color:'#22C55E',marginBottom:8,fontSize:'.88rem'}}>
+                    ✅ הרכב נמצא במאגר{vehicleResult.is_taxi ? ' — מונית/תחב"צ' : ''}
+                    {vehicleResult.is_removed && <span style={{color:'#EF4444',marginRight:8}}>⚠ הוסר מהכביש</span>}
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:'.82rem',color:'var(--muted)'}}>
+                    {vehicleResult.manufacturer && <div><strong>יצרן:</strong> {vehicleResult.manufacturer}</div>}
+                    {vehicleResult.model && <div><strong>דגם:</strong> {vehicleResult.model}</div>}
+                    {vehicleResult.color && <div><strong>צבע:</strong> {vehicleResult.color}</div>}
+                    {vehicleResult.year && <div><strong>שנה:</strong> {vehicleResult.year}</div>}
+                    {vehicleResult.test_expiry && <div><strong>טסט עד:</strong> {vehicleResult.test_expiry}</div>}
+                  </div>
+                  {vehicleResult.warnings && vehicleResult.warnings.length > 0 && (
+                    <div style={{marginTop:10,fontSize:'.8rem',color:'#FCA5A5'}}>
+                      {vehicleResult.warnings.map((w,i) => <div key={i}>⚠ {w}</div>)}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="dd-err">🔍 הרכב לא נמצא במאגר. בדוק את מספר הלוחית.</div>
+              )
+            )}
           </div>
 
-          {/* Step 3: Documents */}
-          <div className="dd-sec dd-ain dd-d3">
-            <div className="dd-sec-title">שלב 3 — מסמכים נדרשים</div>
+          {/* Step 2: Documents */}
+          <div className="dd-sec dd-ain dd-d2">
+            <div className="dd-sec-title">שלב 2 — מסמכים נדרשים</div>
             {DOC_ORDER.map(type => (
               <DocCard key={type} type={type} doc={latestDoc(type)} onUploaded={loadCompliance} />
             ))}
@@ -455,8 +536,51 @@ export default function DriverDashboard() {
             📌 לאחר העלאת המסמכים, הם ייבדקו על ידי צוות EasyTaxi תוך 1-2 ימי עסקים.
             תקבל הודעה בוואטסאפ עם תוצאת הבדיקה.
           </div>
+
+          {/* Data deletion */}
+          <div className="dd-sec dd-ain" style={{animationDelay:'.3s',borderColor:'rgba(239,68,68,.15)'}}>
+            <div className="dd-sec-title" style={{color:'#FCA5A5'}}>פרטיות ומחיקת נתונים</div>
+            <p style={{fontSize:'.83rem',color:'var(--muted)',lineHeight:1.65,marginBottom:14}}>
+              בהתאם לחוק הגנת הפרטיות, יש לך זכות לבקש מחיקת כל הנתונים שלך מהפלטפורמה.
+              הבקשה תטופל תוך 30 יום. לאחר מחיקת הנתונים, החשבון שלך יוסר לצמיתות.
+            </p>
+            <button className="dd-btn dd-btn-red" onClick={() => setShowDeleteModal(true)}>
+              🗑️ בקשת מחיקת נתונים ויציאה מהפלטפורמה
+            </button>
+          </div>
         </>)}
       </div>
+
+      {/* Delete confirmation modal */}
+      {showDeleteModal && (
+        <div className="dd-modal-overlay" onClick={() => { if (!deleteLoading) setShowDeleteModal(false) }}>
+          <div className="dd-modal" onClick={e => e.stopPropagation()}>
+            {deleteMsg ? (
+              <>
+                <div className="dd-modal-title">✅ הבקשה התקבלה</div>
+                <div className="dd-modal-body">{deleteMsg}<br/>מעביר אותך להתחברות...</div>
+              </>
+            ) : (
+              <>
+                <div className="dd-modal-title">🗑️ מחיקת נתונים</div>
+                <div className="dd-modal-body">
+                  האם אתה בטוח שברצונך למחוק את כל הנתונים שלך ולעזוב את הפלטפורמה?<br/>
+                  <strong style={{color:'#EF4444'}}>פעולה זו בלתי הפיכה.</strong>
+                </div>
+                <div className="dd-modal-actions">
+                  <button className="dd-btn dd-btn-red" onClick={handleDeleteRequest} disabled={deleteLoading}>
+                    {deleteLoading ? '⏳ שולח בקשה...' : '✅ כן, מחק את הנתונים שלי'}
+                  </button>
+                  <button className="dd-btn" style={{background:'rgba(255,255,255,.06)',color:'var(--muted)'}}
+                    onClick={() => setShowDeleteModal(false)} disabled={deleteLoading}>
+                    ← ביטול
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

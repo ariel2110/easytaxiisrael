@@ -29,11 +29,11 @@ export function useAuth() {
             pollRef.current = null;
         }
     }, []);
+    /** Request a WA auth session and start polling */
     const requestWaAuth = useCallback(async (phone) => {
         setState((s) => ({ ...s, error: null }));
         const res = await api.auth.requestWaAuth(phone, 'driver');
         setWaSession({ session_id: res.session_id, whatsapp_link: res.whatsapp_link });
-        return res;
         _stopPolling();
         pollRef.current = setInterval(async () => {
             try {
@@ -45,8 +45,8 @@ export function useAuth() {
                     if (poll.kyc_url)
                         localStorage.setItem('kyc_url', poll.kyc_url);
                     const user = await api.auth.me();
+                    setWaSession(prev => prev ? { ...prev, kyc_url: poll.kyc_url } : null);
                     setState({ user, loading: false, error: null });
-                    setWaSession(null);
                 }
                 else if (poll.status === 'expired') {
                     _stopPolling();
@@ -54,8 +54,9 @@ export function useAuth() {
                     setState((s) => ({ ...s, error: 'פג תוקף הקישור. אנא נסה שוב.' }));
                 }
             }
-            catch { /* keep polling on network hiccup */ }
+            catch { /* keep polling on network error */ }
         }, 2000);
+        return res;
     }, [_stopPolling]);
     const cancelWaAuth = useCallback(() => {
         _stopPolling();

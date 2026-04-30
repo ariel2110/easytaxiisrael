@@ -168,17 +168,17 @@ const CSS = `
 .lg-modal-cancel{margin-top:12px;background:none;border:none;color:var(--muted);font:600 .82rem 'Heebo',sans-serif;cursor:pointer;}
 `;
 export default function Login() {
-    const { requestOtp, verifyOtp, cancelOtp, otpPhone, error, user, loading } = useAuth();
+    const { requestWaAuth, cancelWaAuth, waSession, error, user, loading } = useAuth();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const [phone, setPhone] = useState('');
-    const [otp, setOtp] = useState('');
     const [busy, setBusy] = useState(false);
     const [localErr, setLocalErr] = useState(null);
     const [selectedRole, setSelectedRole] = useState(() => {
         const urlRole = new URLSearchParams(window.location.search).get('role');
         return (urlRole === 'passenger' || urlRole === 'driver' || urlRole === 'taxi') ? urlRole : null;
     });
+    const [waOpened, setWaOpened] = useState(false);
     useEffect(() => {
         const el = document.createElement('style');
         el.id = 'lg-css';
@@ -188,10 +188,8 @@ export default function Login() {
     }, []);
     useEffect(() => {
         if (!loading && user) {
-            // Use server-confirmed role (stored during poll completion) for accurate routing
             const confirmedRole = localStorage.getItem('auth_role') || selectedRole || 'passenger';
             if (confirmedRole === 'driver' || confirmedRole === 'taxi') {
-                // Go directly to pending — no need to ask phone/name again
                 navigate('/driver', { replace: true });
             }
             else {
@@ -199,13 +197,13 @@ export default function Login() {
             }
         }
     }, [user, loading, navigate, selectedRole]);
-    async function handleSendOtp() {
+    async function handleWaAuth() {
         if (!phone.trim())
             return;
         setBusy(true);
         setLocalErr(null);
         try {
-            await requestOtp(phone.trim());
+            await requestWaAuth(phone.trim(), selectedRole ?? 'passenger');
         }
         catch (e) {
             setLocalErr(e.message);
@@ -214,30 +212,22 @@ export default function Login() {
             setBusy(false);
         }
     }
-    async function handleVerifyOtp() {
-        if (otp.length !== 6)
-            return;
-        setBusy(true);
-        setLocalErr(null);
-        try {
-            await verifyOtp(otp, selectedRole ?? 'passenger');
-        }
-        catch (e) {
-            setLocalErr(e.message);
-            setOtp('');
-        }
-        finally {
-            setBusy(false);
+    function handleOpenWhatsApp() {
+        if (waSession?.whatsapp_link) {
+            window.open(waSession.whatsapp_link, '_blank', 'noopener,noreferrer');
+            setWaOpened(true);
         }
     }
     const err = localErr ?? error;
-    return (_jsxs("div", { className: "lg", children: [_jsx("div", { className: "lg-bg" }), _jsx("div", { className: "lg-grid" }), _jsx("a", { href: "/", className: "lg-back", onClick: e => { e.preventDefault(); navigate('/'); }, children: "\u2190 \u05D7\u05D6\u05D5\u05E8 \u05DC\u05D3\u05E3 \u05D4\u05D1\u05D9\u05EA" }), _jsxs("div", { className: "lg-card", children: [_jsxs("div", { className: "lg-logo", children: [_jsx("div", { className: "lg-icon", children: "\uD83D\uDE95" }), _jsxs("div", { className: "lg-brand", children: [_jsx("span", { className: "ac", children: "Easy" }), "Taxi \u05D9\u05E9\u05E8\u05D0\u05DC"] }), _jsx("div", { className: "lg-tagline", children: "\u05DB\u05E0\u05D9\u05E1\u05D4 \u05DE\u05D4\u05D9\u05E8\u05D4 \u05D3\u05E8\u05DA \u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4" })] }), _jsx("div", { style: { display: 'flex', justifyContent: 'center', marginBottom: '26px' }, children: _jsxs("div", { className: "lg-steps", children: [!searchParams.get('role') && _jsx("div", { className: `lg-s ${selectedRole === null ? 'on' : ''}` }), _jsx("div", { className: `lg-s ${selectedRole !== null && !otpPhone ? 'on' : ''}` }), _jsx("div", { className: `lg-s ${otpPhone ? 'on' : ''}` })] }) }), _jsx("div", { style: { textAlign: 'center', marginBottom: '24px' }, children: _jsxs("span", { className: "lg-badge", children: [_jsx("span", { className: "lg-dot" }), "\u05E9\u05D9\u05E8\u05D5\u05EA \u05E4\u05E2\u05D9\u05DC 24/7"] }) }), selectedRole === null ? (
+    return (_jsxs("div", { className: "lg", children: [_jsx("div", { className: "lg-bg" }), _jsx("div", { className: "lg-grid" }), _jsx("a", { href: "/", className: "lg-back", onClick: e => { e.preventDefault(); navigate('/'); }, children: "\u2190 \u05D7\u05D6\u05D5\u05E8 \u05DC\u05D3\u05E3 \u05D4\u05D1\u05D9\u05EA" }), _jsxs("div", { className: "lg-card", children: [_jsxs("div", { className: "lg-logo", children: [_jsx("div", { className: "lg-icon", children: "\uD83D\uDE95" }), _jsxs("div", { className: "lg-brand", children: [_jsx("span", { className: "ac", children: "Easy" }), "Taxi \u05D9\u05E9\u05E8\u05D0\u05DC"] }), _jsx("div", { className: "lg-tagline", children: "\u05DB\u05E0\u05D9\u05E1\u05D4 \u05DE\u05D4\u05D9\u05E8\u05D4 \u05D3\u05E8\u05DA \u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4" })] }), _jsx("div", { style: { display: 'flex', justifyContent: 'center', marginBottom: '26px' }, children: _jsxs("div", { className: "lg-steps", children: [!searchParams.get('role') && _jsx("div", { className: `lg-s ${selectedRole === null ? 'on' : ''}` }), _jsx("div", { className: `lg-s ${selectedRole !== null && !waSession ? 'on' : ''}` }), _jsx("div", { className: `lg-s ${waSession ? 'on' : ''}` })] }) }), _jsx("div", { style: { textAlign: 'center', marginBottom: '24px' }, children: _jsxs("span", { className: "lg-badge", children: [_jsx("span", { className: "lg-dot" }), "\u05E9\u05D9\u05E8\u05D5\u05EA \u05E4\u05E2\u05D9\u05DC 24/7"] }) }), selectedRole === null ? (
                     /* ── Step 0: role selection ── */
-                    _jsxs("div", { children: [_jsx("div", { style: { textAlign: 'center', marginBottom: '16px' }, children: _jsx("div", { style: { fontSize: '.8rem', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '12px' }, children: "\u05D1\u05D7\u05E8 \u05EA\u05E4\u05E7\u05D9\u05D3" }) }), _jsxs("div", { className: "lg-roles", children: [_jsxs("button", { className: "lg-rc pass", onClick: () => setSelectedRole('passenger'), children: [_jsx("div", { className: "lg-rcico", children: "\uD83E\uDDD1\u200D\uD83D\uDCBC" }), _jsx("div", { className: "lg-rct", children: "\u05E0\u05D5\u05E1\u05E2" }), _jsx("div", { className: "lg-rcd", children: "\u05D4\u05D6\u05DE\u05E0\u05EA \u05E0\u05E1\u05D9\u05E2\u05D4" })] }), _jsxs("button", { className: "lg-rc drv", onClick: () => setSelectedRole('driver'), children: [_jsx("div", { className: "lg-rcico", children: "\uD83D\uDE97" }), _jsx("div", { className: "lg-rct", children: "\u05E0\u05D4\u05D2 \u05E2\u05E6\u05DE\u05D0\u05D9" }), _jsx("div", { className: "lg-rcd", children: "\u05D7\u05D5\u05E7 2026" })] }), _jsxs("button", { className: "lg-rc taxi", onClick: () => setSelectedRole('taxi'), children: [_jsx("div", { className: "lg-rcico", children: "\uD83D\uDE95" }), _jsx("div", { className: "lg-rct", children: "\u05DE\u05D5\u05E0\u05D9\u05EA" }), _jsx("div", { className: "lg-rcd", children: "\u05E8\u05D9\u05E9\u05D9\u05D5\u05DF \u05DE\u05D5\u05E0\u05D9\u05EA" })] })] }), _jsxs("div", { className: "lg-role-hint", children: ["\u05DC\u05D0 \u05D1\u05D8\u05D5\u05D7? ", _jsx("a", { href: "/guest", style: { color: 'var(--bluel)', fontWeight: 700 }, children: "\u05E8\u05D0\u05D4 \u05DE\u05D9\u05D3\u05E2 \u2192" })] })] })) : !otpPhone ? (
-                    /* ── Step 1: phone entry ── */
-                    _jsxs("div", { children: [_jsx("label", { className: "lg-lbl", children: "\u05DE\u05E1\u05E4\u05E8 \u05D8\u05DC\u05E4\u05D5\u05DF (\u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4)" }), _jsx("input", { className: "lg-inp", type: "tel", placeholder: "05X-XXX-XXXX", value: phone, onChange: e => setPhone(e.target.value), onKeyDown: e => e.key === 'Enter' && handleSendOtp(), autoFocus: true }), _jsx("button", { className: "lg-cta", disabled: busy || !phone.trim(), onClick: handleSendOtp, children: busy
-                                    ? _jsxs(_Fragment, { children: [_jsx("span", { className: "lg-spin" }), " \u05E9\u05D5\u05DC\u05D7\u2026"] })
-                                    : _jsxs(_Fragment, { children: [_jsx("span", { style: { fontSize: '1.1rem' }, children: "\uD83D\uDCAC" }), " \u05E9\u05DC\u05D7 \u05E7\u05D5\u05D3 \u05D0\u05D9\u05DE\u05D5\u05EA \u05D1\u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4"] }) }), _jsxs("p", { className: "lg-hint", children: ["\u05E0\u05E9\u05DC\u05D7 \u05D0\u05DC\u05D9\u05DA \u05E7\u05D5\u05D3 6 \u05E1\u05E4\u05E8\u05D5\u05EA \u05D1\u05D4\u05D5\u05D3\u05E2\u05EA \u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4.", _jsx("br", {}), "\u05D4\u05DB\u05E0\u05E1 \u05D0\u05D5\u05EA\u05D5 \u05D1\u05E9\u05DC\u05D1 \u05D4\u05D1\u05D0 \u2014 \u05D1\u05DC\u05D9 \u05E1\u05D9\u05E1\u05DE\u05D0, \u05D1\u05DC\u05D9 \u05E7\u05D9\u05E9\u05D5\u05E8\u05D9\u05DD."] }), _jsx("div", { className: "lg-div" }), _jsx("div", { style: { textAlign: 'center', fontSize: '.85rem', color: 'var(--muted)', marginTop: '6px' }, children: _jsx("button", { onClick: () => setSelectedRole(null), style: { background: 'none', border: 'none', color: 'var(--bluel)', fontWeight: 700, cursor: 'pointer', fontFamily: 'Heebo', fontSize: '.85rem' }, children: "\u2190 \u05E9\u05E0\u05D4 \u05EA\u05E4\u05E7\u05D9\u05D3" }) })] })) : (
-                    /* ── Step 2: enter OTP received on WhatsApp ── */
-                    _jsxs("div", { className: "lg-wa-step", children: [_jsx("div", { className: "lg-wa-icon", children: "\uD83D\uDCE9" }), _jsx("div", { className: "lg-wa-title", children: "\u05D4\u05D6\u05DF \u05D0\u05EA \u05D4\u05E7\u05D5\u05D3 \u05DE\u05D4\u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4" }), _jsxs("div", { className: "lg-wa-sub", children: ["\u05E9\u05DC\u05D7\u05E0\u05D5 \u05E7\u05D5\u05D3 6 \u05E1\u05E4\u05E8\u05D5\u05EA \u05DC\u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4 \u05E9\u05DC ", otpPhone, _jsx("br", {}), "\u05D4\u05D5\u05D0 \u05D1\u05EA\u05D5\u05E7\u05E3 \u05DC-5 \u05D3\u05E7\u05D5\u05EA"] }), _jsx("input", { className: "lg-otp", type: "text", inputMode: "numeric", pattern: "[0-9]*", maxLength: 6, placeholder: "000000", value: otp, onChange: e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6)), onKeyDown: e => e.key === 'Enter' && handleVerifyOtp(), autoFocus: true }), _jsx("button", { className: "lg-cta", style: { marginTop: '16px' }, disabled: busy || otp.length !== 6, onClick: handleVerifyOtp, children: busy ? _jsxs(_Fragment, { children: [_jsx("span", { className: "lg-spin" }), " \u05DE\u05D0\u05DE\u05EA\u2026"] }) : _jsx(_Fragment, { children: "\u2705 \u05DB\u05E0\u05D9\u05E1\u05D4" }) }), _jsx("button", { className: "lg-ghost", onClick: () => { cancelOtp(); setOtp(''); }, children: "\u2190 \u05D7\u05D6\u05D5\u05E8 \u05D5\u05E0\u05E1\u05D4 \u05E9\u05D5\u05D1" })] })), err && (_jsxs("div", { className: "lg-err", children: ["\u26A0\uFE0F ", err] }))] }), _jsxs("div", { className: "lg-ftr", children: [_jsx("a", { href: "/guest", children: "\u05DE\u05D7\u05D9\u05E8\u05D9\u05DD \u05D5\u05DE\u05D9\u05D3\u05E2" }), ' · ', _jsx("a", { href: "https://wa.me/447474775344", target: "_blank", rel: "noopener noreferrer", children: "\u05EA\u05DE\u05D9\u05DB\u05D4" })] })] }));
+                    _jsxs("div", { children: [_jsx("div", { style: { textAlign: 'center', marginBottom: '16px' }, children: _jsx("div", { style: { fontSize: '.8rem', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '12px' }, children: "\u05D1\u05D7\u05E8 \u05EA\u05E4\u05E7\u05D9\u05D3" }) }), _jsxs("div", { className: "lg-roles", children: [_jsxs("button", { className: "lg-rc pass", onClick: () => setSelectedRole('passenger'), children: [_jsx("div", { className: "lg-rcico", children: "\uD83E\uDDD1\u200D\uD83D\uDCBC" }), _jsx("div", { className: "lg-rct", children: "\u05E0\u05D5\u05E1\u05E2" }), _jsx("div", { className: "lg-rcd", children: "\u05D4\u05D6\u05DE\u05E0\u05EA \u05E0\u05E1\u05D9\u05E2\u05D4" })] }), _jsxs("button", { className: "lg-rc drv", onClick: () => setSelectedRole('driver'), children: [_jsx("div", { className: "lg-rcico", children: "\uD83D\uDE97" }), _jsx("div", { className: "lg-rct", children: "\u05E0\u05D4\u05D2 \u05E2\u05E6\u05DE\u05D0\u05D9" }), _jsx("div", { className: "lg-rcd", children: "\u05D7\u05D5\u05E7 2026" })] }), _jsxs("button", { className: "lg-rc taxi", onClick: () => setSelectedRole('taxi'), children: [_jsx("div", { className: "lg-rcico", children: "\uD83D\uDE95" }), _jsx("div", { className: "lg-rct", children: "\u05DE\u05D5\u05E0\u05D9\u05EA" }), _jsx("div", { className: "lg-rcd", children: "\u05E8\u05D9\u05E9\u05D9\u05D5\u05DF \u05DE\u05D5\u05E0\u05D9\u05EA" })] })] }), _jsxs("div", { className: "lg-role-hint", children: ["\u05DC\u05D0 \u05D1\u05D8\u05D5\u05D7? ", _jsx("a", { href: "/guest", style: { color: 'var(--bluel)', fontWeight: 700 }, children: "\u05E8\u05D0\u05D4 \u05DE\u05D9\u05D3\u05E2 \u2192" })] })] })) : !waSession ? (
+                    /* ── Step 1: phone entry → WA auth ── */
+                    _jsxs("div", { children: [_jsx("label", { className: "lg-lbl", children: "\u05DE\u05E1\u05E4\u05E8 \u05D8\u05DC\u05E4\u05D5\u05DF (\u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4)" }), _jsx("input", { className: "lg-inp", type: "tel", placeholder: "05X-XXX-XXXX", value: phone, onChange: e => setPhone(e.target.value), onKeyDown: e => e.key === 'Enter' && handleWaAuth(), autoFocus: true }), _jsx("button", { className: "lg-cta", disabled: busy || !phone.trim(), onClick: handleWaAuth, children: busy
+                                    ? _jsxs(_Fragment, { children: [_jsx("span", { className: "lg-spin" }), " \u05D9\u05D5\u05E6\u05E8 \u05E7\u05D9\u05E9\u05D5\u05E8\u2026"] })
+                                    : _jsxs(_Fragment, { children: [_jsx("span", { style: { fontSize: '1.1rem' }, children: "\uD83D\uDCAC" }), " \u05DB\u05E0\u05D9\u05E1\u05D4 \u05D3\u05E8\u05DA \u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4"] }) }), _jsxs("p", { className: "lg-hint", children: ["\u05E0\u05E9\u05DC\u05D7 \u05DC\u05DA \u05E7\u05D9\u05E9\u05D5\u05E8 \u05DC\u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4 \u2014 \u05DC\u05D7\u05E5 \u05E2\u05DC\u05D9\u05D5 \u05D5\u05E9\u05DC\u05D7 \u05D0\u05EA \u05D4\u05D4\u05D5\u05D3\u05E2\u05D4.", _jsx("br", {}), "\u05DC\u05D0 \u05E6\u05E8\u05D9\u05DA \u05E7\u05D5\u05D3, \u05DC\u05D0 \u05E6\u05E8\u05D9\u05DA \u05E1\u05D9\u05E1\u05DE\u05D0. \u05D1\u05DC\u05D7\u05D9\u05E6\u05D4 \u05D0\u05D7\u05EA."] }), _jsx("div", { className: "lg-div" }), _jsx("div", { style: { textAlign: 'center', fontSize: '.85rem', color: 'var(--muted)', marginTop: '6px' }, children: _jsx("button", { onClick: () => setSelectedRole(null), style: { background: 'none', border: 'none', color: 'var(--bluel)', fontWeight: 700, cursor: 'pointer', fontFamily: 'Heebo', fontSize: '.85rem' }, children: "\u2190 \u05E9\u05E0\u05D4 \u05EA\u05E4\u05E7\u05D9\u05D3" }) })] })) : (
+                    /* ── Step 2: WA pending — open WA + auto-poll ── */
+                    _jsxs("div", { className: "lg-wa-step", children: [_jsx("div", { className: "lg-wa-icon", children: waOpened ? '⏳' : '💬' }), _jsx("div", { className: "lg-wa-title", children: waOpened ? 'ממתין לאימות…' : 'פתח וואטסאפ ושלח הודעה' }), _jsx("div", { className: "lg-wa-sub", children: waOpened
+                                    ? 'שלחת את ההודעה? הכניסה תתבצע אוטומטית תוך שניות — לא צריך לעשות כלום.'
+                                    : 'לחץ על הכפתור למטה. וואטסאפ ייפתח עם הודעה מוכנה — פשוט לחץ "שלח".' }), !waOpened ? (_jsxs("button", { className: "lg-wa-btn", onClick: handleOpenWhatsApp, style: { display: 'inline-flex', width: '100%', justifyContent: 'center' }, children: [_jsx("span", { style: { fontSize: '1.2rem' }, children: "\uD83D\uDCAC" }), "\u05E4\u05EA\u05D7 \u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4 \u05DC\u05D0\u05D9\u05DE\u05D5\u05EA"] })) : (_jsxs("div", { className: "lg-poll", children: [_jsx("span", { className: "lg-spin" }), "\u05DE\u05D7\u05DB\u05D4 \u05DC\u05D0\u05D9\u05E9\u05D5\u05E8\u05DA\u2026"] })), waOpened && (_jsx("button", { className: "lg-wa-btn", onClick: handleOpenWhatsApp, style: { display: 'inline-flex', width: '100%', justifyContent: 'center', marginTop: 14, fontSize: '.88rem', padding: '11px 20px', background: 'rgba(37,211,102,.12)', color: '#25D366', boxShadow: 'none', border: '1px solid rgba(37,211,102,.3)' }, children: "\u05DC\u05D0 \u05E0\u05E4\u05EA\u05D7? \u05DC\u05D7\u05E5 \u05E9\u05D5\u05D1" })), _jsx("button", { className: "lg-ghost", style: { marginTop: 16 }, onClick: () => { cancelWaAuth(); setWaOpened(false); setPhone(''); }, children: "\u2190 \u05D7\u05D6\u05D5\u05E8 \u05D5\u05E0\u05E1\u05D4 \u05E9\u05D5\u05D1" })] })), err && (_jsxs("div", { className: "lg-err", children: ["\u26A0\uFE0F ", err] }))] }), _jsxs("div", { className: "lg-ftr", children: [_jsx("a", { href: "/guest", children: "\u05DE\u05D7\u05D9\u05E8\u05D9\u05DD \u05D5\u05DE\u05D9\u05D3\u05E2" }), ' · ', _jsx("a", { href: "https://wa.me/447474775344", target: "_blank", rel: "noopener noreferrer", children: "\u05EA\u05DE\u05D9\u05DB\u05D4" })] })] }));
 }

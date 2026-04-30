@@ -59,6 +59,8 @@ class User(Base):
     # Profile fields — collected during onboarding wizard
     full_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     email: Mapped[str | None] = mapped_column(String(254), nullable=True)
+    # Driver vehicle registration plate — verified against data.gov.il
+    vehicle_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
     # FCM / APNs device token — updated by client on login
     device_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Terms of Service acceptance timestamp — required before first ride

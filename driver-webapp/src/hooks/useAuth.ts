@@ -49,7 +49,6 @@ export function useAuth() {
     setState((s) => ({ ...s, error: null }))
     const res: WaAuthLinkResponse = await api.auth.requestWaAuth(phone, 'driver')
     setWaSession({ session_id: res.session_id, whatsapp_link: res.whatsapp_link })
-    return res
 
     _stopPolling()
     pollRef.current = setInterval(async () => {
@@ -70,6 +69,8 @@ export function useAuth() {
         }
       } catch { /* keep polling on network error */ }
     }, 2000)
+
+    return res
   }, [_stopPolling])
 
   const cancelWaAuth = useCallback(() => {

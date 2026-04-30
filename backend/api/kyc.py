@@ -36,7 +36,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_db
-from core.dependencies import get_current_user, require_roles
+from core.dependencies import get_current_user, require_admin_key, require_roles
 from models.kyc_application import (
     KYCApplication,
     KYCApplicationStatus,
@@ -238,7 +238,7 @@ async def admin_list_applications(
     filter_status: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
-    _: User = Depends(require_roles(UserRole.admin)),
+    _: User = Depends(require_admin_key),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Admin: list all KYC applications with optional status filter."""
@@ -267,7 +267,7 @@ async def admin_list_applications(
 @router.get("/admin/kyc/applications/{app_id}", status_code=status.HTTP_200_OK)
 async def admin_get_application(
     app_id: uuid.UUID,
-    _: User = Depends(require_roles(UserRole.admin)),
+    _: User = Depends(require_admin_key),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Admin: get full application detail including agent raw results."""
@@ -300,7 +300,7 @@ async def admin_get_application(
 async def admin_review_application(
     app_id: uuid.UUID,
     body: dict,
-    admin: User = Depends(require_roles(UserRole.admin)),
+    admin: User = Depends(require_admin_key),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Admin: manually override the agent verdict.

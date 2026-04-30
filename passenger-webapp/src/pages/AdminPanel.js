@@ -1,7 +1,5 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
 import { api } from '../services/api';
 // ── CSS ────────────────────────────────────────────────────────────────────
 const CSS = `
@@ -188,14 +186,116 @@ function DriverDetail({ driver }) {
                     ['סיבת חסימה', profile.block_reason ?? '—'],
                 ].map(([label, value]) => (_jsxs("div", { className: "ap-detail-box", children: [_jsx("div", { className: "ap-detail-label", children: label }), _jsx("div", { className: "ap-detail-value", children: value }), label === 'ציון ציות' && (_jsx("div", { className: "ap-score-bar-bg", children: _jsx("div", { className: "ap-score-bar", style: { width: `${profile.compliance_score}%` } }) }))] }, label))) })), docs === null ? (_jsx("div", { style: { color: 'var(--muted)', fontSize: '.85rem', textAlign: 'center', padding: '20px 0' }, children: "\u23F3 \u05D8\u05D5\u05E2\u05DF \u05DE\u05E1\u05DE\u05DB\u05D9\u05DD\u2026" })) : docs.length === 0 ? (_jsx("div", { className: "ap-empty", children: "\uD83D\uDCC4 \u05D4\u05E0\u05D4\u05D2 \u05DC\u05D0 \u05D4\u05E2\u05DC\u05D4 \u05DE\u05E1\u05DE\u05DB\u05D9\u05DD \u05E2\u05D3\u05D9\u05D9\u05DF" })) : (docs.map(doc => _jsx(DocReviewRow, { doc: doc, onRefresh: load }, doc.id))), !approved ? (_jsx("button", { className: "ap-approve-driver", onClick: handleApprove, disabled: approving, children: approving ? '⏳ מאשר…' : '✅ אשר נהג — אפשר קבלת נסיעות' })) : (_jsx("div", { style: { display: 'flex', alignItems: 'center', gap: 10, padding: 14, background: 'rgba(34,197,94,.08)', border: '1px solid rgba(34,197,94,.25)', borderRadius: 12, fontWeight: 700, color: '#22C55E', marginTop: 14 }, children: "\uD83C\uDFC6 \u05D4\u05E0\u05D4\u05D2 \u05D0\u05D5\u05E9\u05E8 \u2014 \u05D9\u05DB\u05D5\u05DC \u05DC\u05E7\u05D1\u05DC \u05E0\u05E1\u05D9\u05E2\u05D5\u05EA" }))] }));
 }
+// ── WhatsApp Tab ──────────────────────────────────────────────────────────
+function WhatsAppTab() {
+    const [status, setStatus] = useState(null);
+    const [qr, setQr] = useState(null);
+    const [loadingStatus, setLoadingStatus] = useState(true);
+    const [qrLoading, setQrLoading] = useState(false);
+    const [msg, setMsg] = useState(null);
+    const [testPhone, setTestPhone] = useState('');
+    const [autoRefresh, setAutoRefresh] = useState(false);
+    const loadStatus = useCallback(async () => {
+        try {
+            const s = await api.whatsapp.status();
+            setStatus(s);
+            return s;
+        }
+        catch {
+            return null;
+        }
+    }, []);
+    useEffect(() => {
+        loadStatus().then(s => {
+            if (s?.state !== 'open') {
+                api.whatsapp.qr().then((d) => {
+                    setQr(d?.base64 || d?.qr?.base64 || null);
+                }).catch(() => { });
+            }
+            setLoadingStatus(false);
+        });
+    }, [loadStatus]);
+    useEffect(() => {
+        if (!autoRefresh)
+            return;
+        const id = setInterval(async () => {
+            const s = await loadStatus();
+            if (s?.state === 'open') {
+                setAutoRefresh(false);
+                setQr(null);
+                setMsg({ text: '✅ WhatsApp מחובר!', ok: true });
+            }
+        }, 5000);
+        return () => clearInterval(id);
+    }, [autoRefresh, loadStatus]);
+    async function refreshQr() {
+        setQrLoading(true);
+        try {
+            const d = await api.whatsapp.qr();
+            setQr(d?.base64 || d?.qr?.base64 || null);
+            setAutoRefresh(true);
+        }
+        finally {
+            setQrLoading(false);
+        }
+    }
+    async function reconnect() {
+        setQrLoading(true);
+        setMsg(null);
+        try {
+            const res = await api.whatsapp.reconnect();
+            setQr(res?.qr?.base64 || res?.base64 || null);
+            setStatus(prev => prev ? { ...prev, state: 'close' } : prev);
+            setAutoRefresh(true);
+            setMsg({ text: '🔄 התנתק — סרוק QR חדש', ok: true });
+        }
+        catch (e) {
+            setMsg({ text: `שגיאה: ${e.message}`, ok: false });
+        }
+        finally {
+            setQrLoading(false);
+        }
+    }
+    async function fixWebhook() {
+        setMsg(null);
+        try {
+            const res = await api.whatsapp.fixWebhook();
+            setMsg({ text: res.status === 'ok' ? `✅ Webhook עודכן` : '❌ עדכון נכשל', ok: res.status === 'ok' });
+        }
+        catch (e) {
+            setMsg({ text: `שגיאה: ${e.message}`, ok: false });
+        }
+    }
+    async function testSend() {
+        if (!testPhone.trim())
+            return;
+        setMsg(null);
+        try {
+            const res = await api.whatsapp.testSend(testPhone.trim());
+            setMsg({ text: res.status === 'ok' ? `✅ נשלח ל-${testPhone}` : `❌ שליחה נכשלה`, ok: res.status === 'ok' });
+        }
+        catch (e) {
+            setMsg({ text: `שגיאה: ${e.message}`, ok: false });
+        }
+    }
+    const isConnected = status?.state === 'open';
+    const webhookOk = status?.configured_webhook === status?.correct_webhook;
+    if (loadingStatus)
+        return _jsx("div", { className: "ap-empty", children: "\u23F3 \u05D8\u05D5\u05E2\u05DF\u2026" });
+    return (_jsxs("div", { children: [_jsxs("div", { style: { background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 14, padding: 16, marginBottom: 12 }, children: [_jsxs("div", { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }, children: [_jsx("div", { style: { fontWeight: 700 }, children: "\u05E1\u05D8\u05D8\u05D5\u05E1 \u05D7\u05D9\u05D1\u05D5\u05E8" }), _jsx("button", { className: "ap-btn", style: { background: 'rgba(255,255,255,.06)', color: '#94A3B8', border: '1px solid rgba(255,255,255,.1)', fontSize: '.8rem' }, onClick: loadStatus, children: "\u21BB \u05E8\u05E2\u05E0\u05DF" })] }), _jsx("div", { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }, children: [
+                            ['מצב', _jsx("span", { style: { color: isConnected ? '#22C55E' : '#EF4444', fontWeight: 700 }, children: isConnected ? '🟢 מחובר' : '🔴 מנותק' })],
+                            ['מספר מחובר', status?.owner_phone ? `+${status.owner_phone}` : '—'],
+                            ['שם פרופיל', status?.profile_name || '—'],
+                            ['Webhook', webhookOk ? _jsx("span", { style: { color: '#22C55E', fontSize: '.8rem' }, children: "\u2705 \u05EA\u05E7\u05D9\u05DF" }) : _jsx("span", { style: { color: '#F59E0B', fontSize: '.8rem' }, children: "\u26A0\uFE0F \u05DC\u05D0 \u05EA\u05E7\u05D9\u05DF" })],
+                        ].map(([label, value], i) => (_jsxs("div", { style: { background: 'rgba(255,255,255,.03)', borderRadius: 8, padding: '10px 12px' }, children: [_jsx("div", { style: { fontSize: '.72rem', color: '#94A3B8', marginBottom: 4 }, children: label }), _jsx("div", { style: { fontWeight: 600, fontSize: '.9rem' }, children: value })] }, i))) })] }), !isConnected && (_jsxs("div", { style: { background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 14, padding: 16, marginBottom: 12, textAlign: 'center' }, children: [_jsx("div", { style: { fontWeight: 700, marginBottom: 6 }, children: "\u05E1\u05E8\u05D9\u05E7\u05EA QR \u05DC\u05D7\u05D9\u05D1\u05D5\u05E8" }), _jsx("div", { style: { color: '#94A3B8', fontSize: '.82rem', marginBottom: 16 }, children: "\u05E4\u05EA\u05D7 WhatsApp \u2192 \u22EE \u2192 \u05DE\u05DB\u05E9\u05D9\u05E8\u05D9\u05DD \u05DE\u05E7\u05D5\u05E9\u05E8\u05D9\u05DD \u2192 \u05E7\u05E9\u05E8 \u05DE\u05DB\u05E9\u05D9\u05E8 \u2192 \u05E1\u05E8\u05D5\u05E7" }), qrLoading ? (_jsx("div", { style: { height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8' }, children: "\u23F3 \u05D8\u05D5\u05E2\u05DF QR\u2026" })) : qr ? (_jsx("div", { style: { display: 'inline-block', background: '#fff', padding: 12, borderRadius: 12, marginBottom: 14 }, children: _jsx("img", { src: qr, alt: "QR", style: { display: 'block', width: 220, height: 220 } }) })) : (_jsx("div", { style: { height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8', fontSize: '.88rem' }, children: "\u05DC\u05D7\u05E5 \"QR \u05D7\u05D3\u05E9\"" })), autoRefresh && _jsx("div", { style: { color: '#94A3B8', fontSize: '.8rem', marginBottom: 10 }, children: "\u23F3 \u05DE\u05D7\u05DB\u05D4 \u05DC\u05E1\u05E8\u05D9\u05E7\u05D4\u2026" }), _jsxs("div", { style: { display: 'flex', gap: 8, justifyContent: 'center' }, children: [_jsx("button", { className: "ap-btn ap-btn-blue", onClick: refreshQr, disabled: qrLoading, children: "\uD83D\uDCF7 QR \u05D7\u05D3\u05E9" }), _jsx("button", { className: "ap-btn ap-btn-red", onClick: reconnect, disabled: qrLoading, children: "\uD83D\uDD04 \u05D4\u05EA\u05E0\u05EA\u05E7 \u05DE\u05D7\u05D3\u05E9" })] })] })), _jsxs("div", { style: { background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 14, padding: 16, marginBottom: 12 }, children: [_jsx("div", { style: { fontWeight: 700, marginBottom: 12 }, children: "\u2699\uFE0F \u05E4\u05E2\u05D5\u05DC\u05D5\u05EA" }), _jsxs("div", { style: { display: 'flex', flexWrap: 'wrap', gap: 8 }, children: [_jsx("button", { className: "ap-btn", style: { background: 'rgba(255,255,255,.06)', color: '#94A3B8', border: '1px solid rgba(255,255,255,.1)', fontSize: '.85rem' }, onClick: fixWebhook, children: "\uD83D\uDD27 \u05EA\u05E7\u05DF Webhook" }), isConnected && _jsx("button", { className: "ap-btn ap-btn-red", onClick: reconnect, style: { fontSize: '.85rem' }, children: "\uD83D\uDD04 \u05E0\u05EA\u05E7 (QR \u05D7\u05D3\u05E9)" })] })] }), _jsxs("div", { style: { background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 14, padding: 16, marginBottom: 12 }, children: [_jsx("div", { style: { fontWeight: 700, marginBottom: 12 }, children: "\uD83D\uDCE4 \u05E9\u05DC\u05D7 \u05D4\u05D5\u05D3\u05E2\u05EA \u05D1\u05D3\u05D9\u05E7\u05D4" }), _jsxs("div", { style: { display: 'flex', gap: 8 }, children: [_jsx("input", { type: "tel", placeholder: "972501234567", value: testPhone, onChange: e => setTestPhone(e.target.value), className: "ap-reject-input", style: { direction: 'ltr' } }), _jsx("button", { className: "ap-btn ap-btn-blue", onClick: testSend, disabled: !testPhone.trim() || !isConnected, style: { fontSize: '.85rem' }, children: "\u05E9\u05DC\u05D7" })] }), !isConnected && _jsx("div", { style: { color: '#EF4444', fontSize: '.78rem', marginTop: 8 }, children: "\u26A0\uFE0F \u05DC\u05D0 \u05DE\u05D7\u05D5\u05D1\u05E8 \u2014 \u05DC\u05D0 \u05E0\u05D9\u05EA\u05DF \u05DC\u05E9\u05DC\u05D5\u05D7" })] }), msg && (_jsx("div", { style: { padding: '10px 14px', borderRadius: 10, fontSize: '.88rem', background: msg.ok ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)', border: `1px solid ${msg.ok ? 'rgba(34,197,94,.3)' : 'rgba(239,68,68,.3)'}`, color: msg.ok ? '#22C55E' : '#EF4444' }, children: msg.text }))] }));
+}
 // ── Main ──────────────────────────────────────────────────────────────────
 export default function AdminPanel() {
-    const { logout } = useAuth();
-    const navigate = useNavigate();
     const [drivers, setDrivers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [openId, setOpenId] = useState(null);
     const [filter, setFilter] = useState('all');
+    const [mainTab, setMainTab] = useState('drivers');
     useEffect(() => {
         const el = document.createElement('style');
         el.id = 'ap-css';
@@ -206,14 +306,13 @@ export default function AdminPanel() {
     useEffect(() => {
         api.admin.listDrivers().then(d => { setDrivers(d); setLoading(false); }).catch(() => setLoading(false));
     }, []);
-    function handleLogout() { logout(); navigate('/login', { replace: true }); }
     const filtered = drivers.filter(d => filter === 'all' ? true
         : filter === 'pending' ? d.auth_status !== 'approved'
             : d.auth_status === 'approved');
     const pendingCount = drivers.filter(d => d.pending_docs > 0).length;
-    return (_jsxs("div", { className: "ap", children: [_jsxs("div", { className: "ap-hdr", children: [_jsxs("div", { className: "ap-logo", children: ["\uD83D\uDEE0\uFE0F EasyTaxi \u2014 ", _jsx("span", { style: { color: '#FDE047' }, children: "\u05E0\u05D9\u05D4\u05D5\u05DC" })] }), _jsxs("div", { style: { display: 'flex', alignItems: 'center', gap: 12 }, children: [pendingCount > 0 && (_jsxs("span", { className: "ap-pending-badge", children: ["\u26A0\uFE0F ", pendingCount, " \u05E0\u05D4\u05D2\u05D9\u05DD \u05E2\u05DD \u05DE\u05E1\u05DE\u05DB\u05D9\u05DD \u05DE\u05DE\u05EA\u05D9\u05E0\u05D9\u05DD"] })), _jsx("button", { className: "ap-logout", onClick: handleLogout, children: "\u05D9\u05E6\u05D9\u05D0\u05D4" })] })] }), _jsxs("div", { className: "ap-body", children: [_jsxs("div", { className: "ap-section-title", children: ["\u05E0\u05D9\u05D4\u05D5\u05DC \u05E0\u05D4\u05D2\u05D9\u05DD \u2014 ", drivers.length, " \u05E0\u05D4\u05D2\u05D9\u05DD \u05E8\u05E9\u05D5\u05DE\u05D9\u05DD"] }), _jsx("div", { className: "ap-tabs", children: [['all', 'כולם'], ['pending', 'ממתינים לאישור'], ['approved', 'מאושרים']].map(([v, l]) => (_jsx("button", { className: `ap-tab${filter === v ? ' on' : ''}`, onClick: () => setFilter(v), children: l }, v))) }), loading ? (_jsx("div", { className: "ap-empty", children: "\u23F3 \u05D8\u05D5\u05E2\u05DF \u05E0\u05D4\u05D2\u05D9\u05DD\u2026" })) : filtered.length === 0 ? (_jsx("div", { className: "ap-empty", children: "\u05D0\u05D9\u05DF \u05E0\u05D4\u05D2\u05D9\u05DD \u05D1\u05E7\u05D8\u05D2\u05D5\u05E8\u05D9\u05D4 \u05D6\u05D5" })) : (filtered.map(driver => {
-                        const ac = authChip(driver.auth_status);
-                        const isOpen = openId === driver.driver_id;
-                        return (_jsxs("div", { className: `ap-driver-card${isOpen ? ' open' : ''}`, children: [_jsxs("div", { className: "ap-driver-row", onClick: () => setOpenId(isOpen ? null : driver.driver_id), children: [_jsxs("div", { className: "ap-driver-left", children: [_jsx("div", { className: "ap-driver-avatar", children: "\uD83D\uDE97" }), _jsxs("div", { children: [_jsx("div", { className: "ap-driver-name", children: driver.full_name ?? 'לא הוזן שם' }), _jsx("div", { className: "ap-driver-phone", children: driver.phone })] })] }), _jsxs("div", { className: "ap-driver-right", children: [_jsx("span", { className: "ap-chip", style: { color: ac.c, background: ac.bg }, children: driver.auth_status }), _jsxs("div", { style: { display: 'flex', gap: 6 }, children: [_jsxs("span", { style: { fontSize: '.75rem', color: 'var(--muted)' }, children: ["\u05E6\u05D9\u05D5\u05DF: ", driver.compliance_score] }), driver.pending_docs > 0 && (_jsxs("span", { className: "ap-pending-badge", children: [driver.pending_docs, " \u05DE\u05DE\u05EA\u05D9\u05E0\u05D9\u05DD"] }))] })] })] }), isOpen && _jsx(DriverDetail, { driver: driver })] }, driver.driver_id));
-                    }))] })] }));
+    return (_jsxs("div", { className: "ap", children: [_jsxs("div", { className: "ap-hdr", children: [_jsxs("div", { className: "ap-logo", children: ["\uD83D\uDEE0\uFE0F EasyTaxi \u2014 ", _jsx("span", { style: { color: '#FDE047' }, children: "\u05E0\u05D9\u05D4\u05D5\u05DC" })] }), pendingCount > 0 && (_jsxs("span", { className: "ap-pending-badge", children: ["\u26A0\uFE0F ", pendingCount, " \u05E0\u05D4\u05D2\u05D9\u05DD \u05E2\u05DD \u05DE\u05E1\u05DE\u05DB\u05D9\u05DD \u05DE\u05DE\u05EA\u05D9\u05E0\u05D9\u05DD"] }))] }), _jsxs("div", { className: "ap-body", children: [_jsxs("div", { className: "ap-tabs", style: { marginBottom: 20 }, children: [_jsx("button", { className: `ap-tab${mainTab === 'drivers' ? ' on' : ''}`, onClick: () => setMainTab('drivers'), children: "\uD83D\uDE97 \u05E0\u05D4\u05D2\u05D9\u05DD" }), _jsx("button", { className: `ap-tab${mainTab === 'whatsapp' ? ' on' : ''}`, onClick: () => setMainTab('whatsapp'), children: "\uD83D\uDCAC WhatsApp" })] }), mainTab === 'whatsapp' ? _jsx(WhatsAppTab, {}) : (_jsxs(_Fragment, { children: [_jsxs("div", { className: "ap-section-title", children: ["\u05E0\u05D9\u05D4\u05D5\u05DC \u05E0\u05D4\u05D2\u05D9\u05DD \u2014 ", drivers.length, " \u05E0\u05D4\u05D2\u05D9\u05DD \u05E8\u05E9\u05D5\u05DE\u05D9\u05DD"] }), _jsx("div", { className: "ap-tabs", children: [['all', 'כולם'], ['pending', 'ממתינים לאישור'], ['approved', 'מאושרים']].map(([v, l]) => (_jsx("button", { className: `ap-tab${filter === v ? ' on' : ''}`, onClick: () => setFilter(v), children: l }, v))) }), loading ? (_jsx("div", { className: "ap-empty", children: "\u23F3 \u05D8\u05D5\u05E2\u05DF \u05E0\u05D4\u05D2\u05D9\u05DD\u2026" })) : filtered.length === 0 ? (_jsx("div", { className: "ap-empty", children: "\u05D0\u05D9\u05DF \u05E0\u05D4\u05D2\u05D9\u05DD \u05D1\u05E7\u05D8\u05D2\u05D5\u05E8\u05D9\u05D4 \u05D6\u05D5" })) : (filtered.map(driver => {
+                                const ac = authChip(driver.auth_status);
+                                const isOpen = openId === driver.driver_id;
+                                return (_jsxs("div", { className: `ap-driver-card${isOpen ? ' open' : ''}`, children: [_jsxs("div", { className: "ap-driver-row", onClick: () => setOpenId(isOpen ? null : driver.driver_id), children: [_jsxs("div", { className: "ap-driver-left", children: [_jsx("div", { className: "ap-driver-avatar", children: "\uD83D\uDE97" }), _jsxs("div", { children: [_jsx("div", { className: "ap-driver-name", children: driver.full_name ?? 'לא הוזן שם' }), _jsx("div", { className: "ap-driver-phone", children: driver.phone })] })] }), _jsxs("div", { className: "ap-driver-right", children: [_jsx("span", { className: "ap-chip", style: { color: ac.c, background: ac.bg }, children: driver.auth_status }), _jsxs("div", { style: { display: 'flex', gap: 6 }, children: [_jsxs("span", { style: { fontSize: '.75rem', color: 'var(--muted)' }, children: ["\u05E6\u05D9\u05D5\u05DF: ", driver.compliance_score] }), driver.pending_docs > 0 && (_jsxs("span", { className: "ap-pending-badge", children: [driver.pending_docs, " \u05DE\u05DE\u05EA\u05D9\u05E0\u05D9\u05DD"] }))] })] })] }), isOpen && _jsx(DriverDetail, { driver: driver })] }, driver.driver_id));
+                            }))] }))] })] }));
 }

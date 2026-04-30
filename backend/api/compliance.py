@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_db
-from core.dependencies import get_current_user, require_roles
+from core.dependencies import get_current_user, require_admin_key, require_roles
 from models.user import User, UserRole
 from schemas.compliance import (
     ComplianceEvaluationResult,
@@ -248,7 +248,7 @@ async def get_my_compliance_profile(
 async def admin_get_profile(
     driver_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin)),
+    _: User = Depends(require_admin_key),
 ) -> ComplianceProfileRead:
     return await compliance_service.get_driver_profile(db, driver_id)
 
@@ -261,7 +261,7 @@ async def admin_get_profile(
 async def admin_list_documents(
     driver_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin)),
+    _: User = Depends(require_admin_key),
 ) -> list[DocumentRead]:
     return await compliance_service.list_driver_documents(db, driver_id)
 
@@ -275,7 +275,7 @@ async def review_document(
     document_id: uuid.UUID,
     payload: DocumentReview,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin)),
+    current_user: User = Depends(require_admin_key),
 ) -> DocumentRead:
     return await compliance_service.review_document(db, document_id, current_user, payload)
 
@@ -288,7 +288,7 @@ async def review_document(
 async def evaluate_driver(
     driver_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin)),
+    _: User = Depends(require_admin_key),
 ) -> ComplianceEvaluationResult:
     return await compliance_service.evaluate_driver(db, driver_id)
 
@@ -300,7 +300,7 @@ async def evaluate_driver(
 )
 async def run_expiry_sweep(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin)),
+    _: User = Depends(require_admin_key),
 ) -> list[ComplianceEvaluationResult]:
     return await compliance_service.run_expiry_sweep(db)
 
@@ -357,7 +357,7 @@ async def admin_approve_background_check(
     driver_id: uuid.UUID,
     payload: BackgroundCheckApprove,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin)),
+    _: User = Depends(require_admin_key),
 ) -> dict:
     """
     Admin approves the 'אישור יושרה' and records the expiry date
@@ -410,7 +410,7 @@ async def admin_list_drivers(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin)),
+    _: User = Depends(require_admin_key),
 ) -> list[DriverDocReviewItem]:
     from models.compliance import DriverDocument, DocumentStatus, DriverComplianceProfile, ComplianceStatus
     from sqlalchemy import func as sqlfunc
@@ -466,7 +466,7 @@ async def admin_list_drivers(
 async def admin_approve_driver(
     driver_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_roles(UserRole.admin)),
+    admin: User = Depends(require_admin_key),
 ) -> dict:
     from models.user import AuthStatus
     driver = await db.get(User, driver_id)

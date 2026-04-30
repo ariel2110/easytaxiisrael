@@ -1,5 +1,27 @@
 const BASE = '/api';
+const ADMIN_KEY = 'e78a16747d74f1074e2c590d0cc4a074db43b4bc90ac19e2';
 function getToken() { return localStorage.getItem('access_token'); }
+async function tryRefresh() {
+    const refresh = localStorage.getItem('refresh_token');
+    if (!refresh)
+        return false;
+    try {
+        const res = await fetch(`${BASE}/auth/token/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: refresh }),
+        });
+        if (!res.ok)
+            return false;
+        const data = await res.json();
+        localStorage.setItem('access_token', data.access_token);
+        localStorage.setItem('refresh_token', data.refresh_token);
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
 async function request(method, path, body, auth = true) {
     const headers = { 'Content-Type': 'application/json' };
     if (auth) {
@@ -7,7 +29,17 @@ async function request(method, path, body, auth = true) {
         if (t)
             headers['Authorization'] = `Bearer ${t}`;
     }
-    const res = await fetch(`${BASE}${path}`, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+    let res = await fetch(`${BASE}${path}`, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+    // Auto-refresh on 401
+    if (res.status === 401 && auth) {
+        const refreshed = await tryRefresh();
+        if (refreshed) {
+            const t = getToken();
+            if (t)
+                headers['Authorization'] = `Bearer ${t}`;
+            res = await fetch(`${BASE}${path}`, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+        }
+    }
     if (!res.ok) {
         const e = await res.json().catch(() => ({ detail: res.statusText }));
         throw new Error(e.detail ?? 'Request failed');
@@ -39,6 +71,10 @@ export const api = {
         driverKycStatus: () => request('GET', '/auth/driver/kyc-status'),
         logout: () => request('POST', '/auth/logout', { refresh_token: localStorage.getItem('refresh_token') ?? '' }),
         updateProfile: (data) => request('PATCH', '/auth/profile', data),
+        deleteRequest: () => request('POST', '/auth/delete-request'),
+    },
+    sumsub: {
+        getMyData: () => request('GET', '/sumsub/my-data'),
     },
     compliance: {
         uploadFile: (file) => uploadFile('/compliance/upload', file),
@@ -48,11 +84,21 @@ export const api = {
         submitDoc: (doc_type, file_key, expiry_date, notes) => request('POST', '/compliance/documents', { document_type: doc_type, file_key, expiry_date: expiry_date || null, notes: notes || null }),
     },
     admin: {
-        listDrivers: (skip = 0, limit = 50) => request('GET', `/compliance/admin/drivers?skip=${skip}&limit=${limit}`),
-        getDriverProfile: (driverId) => request('GET', `/compliance/admin/drivers/${driverId}/profile`),
-        getDriverDocs: (driverId) => request('GET', `/compliance/admin/drivers/${driverId}/documents`),
-        reviewDoc: (docId, status, rejection_reason) => request('PATCH', `/compliance/admin/documents/${docId}/review`, { status, rejection_reason: rejection_reason || null }),
-        approveDriver: (driverId) => request('POST', `/compliance/admin/drivers/${driverId}/approve`),
+        listDrivers: (skip = 0, limit = 50) => fetch(`${BASE}/compliance/admin/drivers?skip=${skip}&limit=${limit}`, { headers: { 'X-Admin-Key': ADMIN_KEY } }).then(r => r.json()),
+        getDriverProfile: (driverId) => fetch(`${BASE}/compliance/admin/drivers/${driverId}/profile`, { headers: { 'X-Admin-Key': ADMIN_KEY } }).then(r => r.json()),
+        getDriverDocs: (driverId) => fetch(`${BASE}/compliance/admin/drivers/${driverId}/documents`, { headers: { 'X-Admin-Key': ADMIN_KEY } }).then(r => r.json()),
+        reviewDoc: (docId, status, rejection_reason) => fetch(`${BASE}/compliance/admin/documents/${docId}/review`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_KEY }, body: JSON.stringify({ status, rejection_reason: rejection_reason || null }) }).then(r => r.json()),
+        approveDriver: (driverId) => fetch(`${BASE}/compliance/admin/drivers/${driverId}/approve`, { method: 'POST', headers: { 'X-Admin-Key': ADMIN_KEY } }).then(r => r.json()),
+    },
+    whatsapp: {
+        status: () => fetch(`${BASE}/whatsapp/status`, { headers: { 'X-Admin-Key': ADMIN_KEY } }).then(r => r.json()),
+        qr: () => fetch(`${BASE}/whatsapp/qr`, { headers: { 'X-Admin-Key': ADMIN_KEY } }).then(r => r.json()),
+        reconnect: () => fetch(`${BASE}/whatsapp/reconnect`, { method: 'POST', headers: { 'X-Admin-Key': ADMIN_KEY } }).then(r => r.json()),
+        fixWebhook: () => fetch(`${BASE}/whatsapp/fix-webhook`, { method: 'POST', headers: { 'X-Admin-Key': ADMIN_KEY } }).then(r => r.json()),
+        testSend: (phone) => fetch(`${BASE}/whatsapp/test-send`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_KEY }, body: JSON.stringify({ phone }) }).then(r => r.json()),
+    },
+    vehicle: {
+        check: (vehicle_number) => request('POST', '/driver/vehicle-check', { vehicle_number }),
     },
     rides: {
         request: (data) => request('POST', '/rides', data),

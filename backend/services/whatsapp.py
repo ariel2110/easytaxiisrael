@@ -45,9 +45,21 @@ async def _post(path: str, payload: dict) -> dict | None:
 async def send_text(phone: str, text: str) -> bool:
     """Send a plain-text WhatsApp message. Returns True on success."""
     number = _normalize(phone)
+    print(f"[SEND_TEXT] to={number} text={repr(text[:80])}", flush=True)
     result = await _post(
         f"message/sendText/{_INST}",
         {"number": number, "textMessage": {"text": text}},
+    )
+    print(f"[SEND_TEXT] result={result}", flush=True)
+    return result is not None
+
+
+async def send_text_to_jid(jid: str, text: str) -> bool:
+    """Send a plain-text WhatsApp message to a raw JID (e.g. @lid or @s.whatsapp.net).
+    Use this when the phone number cannot be resolved (e.g. Meta @lid anonymous IDs)."""
+    result = await _post(
+        f"message/sendText/{_INST}",
+        {"number": jid, "textMessage": {"text": text}},
     )
     return result is not None
 

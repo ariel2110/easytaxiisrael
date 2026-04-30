@@ -80,64 +80,8 @@ export default function DriverPending() {
     const navigate = useNavigate();
     const [elapsed, setElapsed] = useState(0);
     const [kycStatus, setKycStatus] = useState('created');
-    const [kycUrl, setKycUrl] = useState(() => localStorage.getItem('kyc_url'));
     const [approved, setApproved] = useState(false);
-    const [kycLoading, setKycLoading] = useState(false);
     const pollRef = useRef(null);
-    function handleStartKyc() {
-        if (!kycUrl || kycLoading)
-            return;
-        let inquiryId = null;
-        let sessionToken = null;
-        try {
-            const parsed = new URL(kycUrl);
-            inquiryId = parsed.searchParams.get('inquiry-id');
-            sessionToken = parsed.searchParams.get('session-token');
-        }
-        catch { /* ignore */ }
-        if (!inquiryId) {
-            window.location.href = kycUrl;
-            return;
-        }
-        setKycLoading(true);
-        const iid = inquiryId;
-        const stok = sessionToken;
-        function openClient() {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const P = window.Persona;
-            if (!P?.Client) {
-                setKycLoading(false);
-                window.location.href = kycUrl;
-                return;
-            }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const cfg = {
-                inquiryId: iid,
-                onReady: () => { setKycLoading(false); client.open(); },
-                onComplete: () => { window.location.reload(); },
-                onCancel: () => { setKycLoading(false); },
-                onError: () => { setKycLoading(false); window.location.href = kycUrl; },
-            };
-            if (stok)
-                cfg.sessionToken = stok;
-            const client = new P.Client(cfg);
-        }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (window.Persona?.Client) {
-            openClient();
-            return;
-        }
-        if (document.getElementById('persona-sdk')) {
-            document.getElementById('persona-sdk').addEventListener('load', openClient, { once: true });
-            return;
-        }
-        const s = document.createElement('script');
-        s.id = 'persona-sdk';
-        s.src = 'https://cdn.withpersona.com/dist/persona-v5-latest.js';
-        s.addEventListener('load', openClient, { once: true });
-        s.addEventListener('error', () => { setKycLoading(false); window.location.href = kycUrl; }, { once: true });
-        document.head.appendChild(s);
-    }
     useEffect(() => {
         const el = document.createElement('style');
         el.id = 'dp-css';
@@ -160,8 +104,6 @@ export default function DriverPending() {
                     return;
                 const data = await r.json();
                 setKycStatus(data.kyc_status);
-                if (data.kyc_url)
-                    setKycUrl(data.kyc_url);
                 if (data.kyc_status === 'approved') {
                     setApproved(true);
                     if (pollRef.current)
@@ -177,9 +119,5 @@ export default function DriverPending() {
     }, []);
     const etaHours = Math.max(2, 24 - elapsed);
     const steps = stepsFromKyc(kycStatus);
-    return (_jsxs("div", { className: "dp", children: [kycLoading && (_jsxs("div", { style: {
-                    position: 'fixed', inset: 0, zIndex: 9999,
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    background: 'rgba(7,11,20,0.96)',
-                }, children: [_jsx("div", { style: { width: 48, height: 48, border: '4px solid rgba(255,255,255,.1)', borderTopColor: '#7C3AED', borderRadius: '50%', animation: 'dpSpin 1s linear infinite' } }), _jsx("p", { style: { marginTop: 20, color: '#94A3B8', fontFamily: 'Heebo,sans-serif', fontSize: '0.95rem' }, children: "\u05D8\u05D5\u05E2\u05DF \u05D0\u05D9\u05DE\u05D5\u05EA \u05D6\u05D4\u05D5\u05EA\u2026" })] })), _jsx("div", { className: "dp-bg" }), _jsxs("div", { className: "dp-wrap", children: [_jsxs("div", { className: "dp-icon-wrap dp-ain", children: [_jsx("div", { className: "dp-pulseRing" }), _jsx("div", { className: "dp-icon", children: "\uD83E\uDEAA" })] }), _jsx("div", { className: "dp-card dp-ain dp-d1", children: approved ? (_jsxs(_Fragment, { children: [_jsxs("div", { className: "dp-title", children: ["\uD83C\uDF89 ", _jsx("span", { children: "\u05D0\u05D5\u05E9\u05E8\u05EA!" })] }), _jsx("div", { className: "dp-sub", children: "\u05D4\u05D6\u05D4\u05D5\u05EA \u05D0\u05D5\u05DE\u05EA\u05D4 \u05D1\u05D4\u05E6\u05DC\u05D7\u05D4. \u05D0\u05EA\u05D4 \u05DE\u05D5\u05DB\u05DF \u05DC\u05E7\u05D1\u05DC \u05E0\u05E1\u05D9\u05E2\u05D5\u05EA!" }), _jsx("button", { className: "dp-wa", style: { background: '#2563EB', boxShadow: '0 4px 18px rgba(37,99,235,.4)' }, onClick: () => { window.location.href = 'https://driver.easytaxiisrael.com'; }, children: "\uD83D\uDE95 \u05E4\u05EA\u05D7 \u05E4\u05D5\u05E8\u05D8\u05DC \u05E0\u05D4\u05D2\u05D9\u05DD" })] })) : (_jsxs(_Fragment, { children: [_jsxs("div", { className: "dp-title", children: ["\u05D0\u05D9\u05DE\u05D5\u05EA ", _jsx("span", { children: "\u05D1\u05EA\u05D4\u05DC\u05D9\u05DA" })] }), _jsx("div", { className: "dp-sub", children: "\u05E7\u05D9\u05D1\u05DC\u05E0\u05D5 \u05D0\u05EA \u05D4\u05DE\u05E1\u05DE\u05DB\u05D9\u05DD \u05E9\u05DC\u05DA. Persona KYC \u05DE\u05D0\u05DE\u05EA\u05EA \u05D0\u05EA \u05D4\u05D6\u05D4\u05D5\u05EA \u05E9\u05DC\u05DA \u05DB\u05E2\u05EA. \u05EA\u05E7\u05D1\u05DC \u05D4\u05D5\u05D3\u05E2\u05D4 \u05D1\u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4 \u05D1\u05E8\u05D2\u05E2 \u05E9\u05EA\u05D4\u05D9\u05D4 \u05DE\u05D5\u05DB\u05DF \u05DC\u05E0\u05E1\u05D5\u05E2." }), _jsxs("div", { className: "dp-eta", children: ["\u23F1 \u05D6\u05DE\u05DF \u05DE\u05DE\u05D5\u05E6\u05E2 \u05DC\u05D0\u05D9\u05E9\u05D5\u05E8: \u05E2\u05D3 ", etaHours, " \u05E9\u05E2\u05D5\u05EA"] }), _jsx("div", { className: "dp-steps", children: steps.map(s => (_jsxs("div", { className: `dp-srow ${s.status}`, children: [_jsx("div", { className: "dp-sbadge", children: s.status === 'done' ? '✓' : s.status === 'active' ? '⚙' : '○' }), _jsxs("div", { children: [_jsx("div", { className: "dp-slabel", children: s.label }), _jsx("div", { className: "dp-sdesc", children: s.desc })] })] }, s.label))) }), kycUrl && (kycStatus === 'not_started' || kycStatus === 'created') && (_jsxs("button", { className: "dp-wa", style: { background: '#7C3AED', boxShadow: '0 4px 18px rgba(124,58,237,.4)', marginBottom: '12px' }, onClick: handleStartKyc, disabled: kycLoading, children: ["\uD83E\uDEAA ", kycLoading ? 'טוען…' : 'השלם אימות Persona'] })), _jsx("div", { className: "dp-persona", children: "\uD83D\uDEE1\uFE0F \u05DE\u05D5\u05E4\u05E2\u05DC \u05E2\u05DC \u05D9\u05D3\u05D9 Persona \u00B7 ISO 27001 \u00B7 SOC 2" })] })) }), _jsxs("div", { className: "dp-ain dp-d2", children: [_jsx("a", { href: "https://wa.me/447474775344?text=%D7%A9%D7%9C%D7%95%D7%9D%2C%20%D7%90%D7%A0%D7%99%20%D7%A0%D7%94%D7%92%20%D7%9E%D7%97%D7%9B%D7%94%20%D7%9C%D7%90%D7%99%D7%A9%D7%95%D7%A8", target: "_blank", rel: "noopener noreferrer", className: "dp-wa", children: "\uD83D\uDCAC \u05E9\u05D0\u05DC \u05D0\u05EA \u05D4\u05EA\u05DE\u05D9\u05DB\u05D4 \u05D1\u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4" }), _jsx("a", { className: "dp-link", onClick: () => navigate('/'), style: { cursor: 'pointer' }, children: "\u2190 \u05D7\u05D6\u05D5\u05E8 \u05DC\u05D3\u05E3 \u05D4\u05D1\u05D9\u05EA" })] })] })] }));
+    return (_jsxs("div", { className: "dp", children: [_jsx("div", { className: "dp-bg" }), _jsxs("div", { className: "dp-wrap", children: [_jsxs("div", { className: "dp-icon-wrap dp-ain", children: [_jsx("div", { className: "dp-pulseRing" }), _jsx("div", { className: "dp-icon", children: "\uD83E\uDEAA" })] }), _jsx("div", { className: "dp-card dp-ain dp-d1", children: approved ? (_jsxs(_Fragment, { children: [_jsxs("div", { className: "dp-title", children: ["\uD83C\uDF89 ", _jsx("span", { children: "\u05D0\u05D5\u05E9\u05E8\u05EA!" })] }), _jsx("div", { className: "dp-sub", children: "\u05D4\u05D6\u05D4\u05D5\u05EA \u05D0\u05D5\u05DE\u05EA\u05D4 \u05D1\u05D4\u05E6\u05DC\u05D7\u05D4. \u05D0\u05EA\u05D4 \u05DE\u05D5\u05DB\u05DF \u05DC\u05E7\u05D1\u05DC \u05E0\u05E1\u05D9\u05E2\u05D5\u05EA!" }), _jsx("button", { className: "dp-wa", style: { background: '#2563EB', boxShadow: '0 4px 18px rgba(37,99,235,.4)' }, onClick: () => { window.location.href = 'https://driver.easytaxiisrael.com'; }, children: "\uD83D\uDE95 \u05E4\u05EA\u05D7 \u05E4\u05D5\u05E8\u05D8\u05DC \u05E0\u05D4\u05D2\u05D9\u05DD" })] })) : (_jsxs(_Fragment, { children: [_jsxs("div", { className: "dp-title", children: ["\u05D0\u05D9\u05DE\u05D5\u05EA ", _jsx("span", { children: "\u05D1\u05EA\u05D4\u05DC\u05D9\u05DA" })] }), _jsx("div", { className: "dp-sub", children: "\u05E7\u05D9\u05D1\u05DC\u05E0\u05D5 \u05D0\u05EA \u05D4\u05DE\u05E1\u05DE\u05DB\u05D9\u05DD \u05E9\u05DC\u05DA. Sumsub KYC \u05DE\u05D0\u05DE\u05EA\u05EA \u05D0\u05EA \u05D4\u05D6\u05D4\u05D5\u05EA \u05E9\u05DC\u05DA \u05DB\u05E2\u05EA. \u05EA\u05E7\u05D1\u05DC \u05D4\u05D5\u05D3\u05E2\u05D4 \u05D1\u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4 \u05D1\u05E8\u05D2\u05E2 \u05E9\u05EA\u05D4\u05D9\u05D4 \u05DE\u05D5\u05DB\u05DF \u05DC\u05E0\u05E1\u05D5\u05E2." }), _jsxs("div", { className: "dp-eta", children: ["\u23F1 \u05D6\u05DE\u05DF \u05DE\u05DE\u05D5\u05E6\u05E2 \u05DC\u05D0\u05D9\u05E9\u05D5\u05E8: \u05E2\u05D3 ", etaHours, " \u05E9\u05E2\u05D5\u05EA"] }), _jsx("div", { className: "dp-steps", children: steps.map(s => (_jsxs("div", { className: `dp-srow ${s.status}`, children: [_jsx("div", { className: "dp-sbadge", children: s.status === 'done' ? '✓' : s.status === 'active' ? '⚙' : '○' }), _jsxs("div", { children: [_jsx("div", { className: "dp-slabel", children: s.label }), _jsx("div", { className: "dp-sdesc", children: s.desc })] })] }, s.label))) }), (kycStatus === 'not_started' || kycStatus === 'created') && (_jsx("button", { className: "dp-wa", style: { background: '#7C3AED', boxShadow: '0 4px 18px rgba(124,58,237,.4)', marginBottom: '12px' }, onClick: () => navigate('/verify'), children: "\uD83E\uDEAA \u05D4\u05EA\u05D7\u05DC \u05D0\u05D9\u05DE\u05D5\u05EA Sumsub" })), _jsx("div", { className: "dp-persona", children: "\uD83D\uDEE1\uFE0F \u05DE\u05D5\u05E4\u05E2\u05DC \u05E2\u05DC \u05D9\u05D3\u05D9 Sumsub \u00B7 ISO 27001 \u00B7 SOC 2" })] })) }), _jsxs("div", { className: "dp-ain dp-d2", children: [_jsx("a", { href: "https://wa.me/447474775344?text=%D7%A9%D7%9C%D7%95%D7%9D%2C%20%D7%90%D7%A0%D7%99%20%D7%A0%D7%94%D7%92%20%D7%9E%D7%97%D7%9B%D7%94%20%D7%9C%D7%90%D7%99%D7%A9%D7%95%D7%A8", target: "_blank", rel: "noopener noreferrer", className: "dp-wa", children: "\uD83D\uDCAC \u05E9\u05D0\u05DC \u05D0\u05EA \u05D4\u05EA\u05DE\u05D9\u05DB\u05D4 \u05D1\u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4" }), _jsx("a", { className: "dp-link", onClick: () => navigate('/'), style: { cursor: 'pointer' }, children: "\u2190 \u05D7\u05D6\u05D5\u05E8 \u05DC\u05D3\u05E3 \u05D4\u05D1\u05D9\u05EA" })] })] })] }));
 }

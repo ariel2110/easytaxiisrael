@@ -21,7 +21,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_db
-from core.dependencies import require_roles
+from core.dependencies import require_admin_key
 from models.audit import AuditAction, AuditLog
 from models.payment import DriverWallet, RidePayment
 from models.rating import Rating, RatingDirection
@@ -30,7 +30,7 @@ from models.user import User, UserRole, AuthStatus, DriverType
 from security.audit import audit
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-_admin = require_roles(UserRole.admin)
+_admin = require_admin_key
 
 
 # ---------------------------------------------------------------------------

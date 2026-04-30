@@ -1,6 +1,6 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../services/api';
 const DOC_META = {
@@ -10,7 +10,7 @@ const DOC_META = {
     background_check: { label: 'אישור יושרה', icon: '✅', desc: 'אישור משטרה / יושרה עדכני', needsExpiry: true },
     vehicle_inspection: { label: 'טסט רכב', icon: '🔧', desc: 'תעודת טסט (רשיון רכב) בתוקף', needsExpiry: true },
 };
-const DOC_ORDER = ['drivers_license', 'vehicle_registration', 'vehicle_insurance', 'background_check', 'vehicle_inspection'];
+const DOC_ORDER = ['vehicle_registration', 'vehicle_insurance', 'background_check', 'vehicle_inspection'];
 // ── CSS ────────────────────────────────────────────────────────────────────
 const CSS = `
 .dd,.dd *,.dd *::before,.dd *::after{box-sizing:border-box;margin:0;padding:0;}
@@ -97,6 +97,26 @@ const CSS = `
 .dd-stat{text-align:center;padding:12px 8px;background:rgba(255,255,255,.04);border-radius:12px;}
 .dd-stat-n{font-size:1.4rem;font-weight:900;color:var(--bluel);}
 .dd-stat-l{font-size:.68rem;color:var(--muted);margin-top:3px;}
+.dd-id-card{background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.25);border-radius:14px;padding:16px;margin-top:12px;}
+.dd-id-card-title{font-size:.78rem;font-weight:700;color:#22C55E;letter-spacing:.5px;margin-bottom:12px;display:flex;align-items:center;gap:6px;}
+.dd-id-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.dd-id-field{background:rgba(255,255,255,.04);border-radius:10px;padding:10px 12px;}
+.dd-id-label{font-size:.68rem;color:var(--muted);margin-bottom:3px;}
+.dd-id-value{font-size:.88rem;font-weight:700;color:var(--white);}
+.dd-step-done{display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(34,197,94,.08);
+  border:1px solid rgba(34,197,94,.25);border-radius:12px;margin-bottom:10px;
+  font-size:.88rem;font-weight:700;color:#22C55E;}
+.dd-step-pending{display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(245,158,11,.07);
+  border:1px solid rgba(245,158,11,.2);border-radius:12px;margin-bottom:10px;
+  font-size:.88rem;font-weight:700;color:#F59E0B;}
+.dd-btn-red{background:linear-gradient(135deg,#DC2626,#B91C1C);color:#fff;box-shadow:0 4px 14px rgba(220,38,38,.3);}
+.dd-btn-red:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 7px 20px rgba(220,38,38,.5);}
+.dd-modal-overlay{position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);
+  display:flex;align-items:center;justify-content:center;padding:20px;}
+.dd-modal{background:#0F172A;border:1px solid rgba(239,68,68,.3);border-radius:20px;padding:28px;max-width:400px;width:100%;}
+.dd-modal-title{font-size:1.1rem;font-weight:900;color:#EF4444;margin-bottom:10px;text-align:center;}
+.dd-modal-body{font-size:.88rem;color:var(--muted);line-height:1.7;text-align:center;margin-bottom:20px;}
+.dd-modal-actions{display:flex;gap:10px;flex-direction:column;}
 @keyframes ddIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
 .dd-ain{animation:ddIn .4s ease both;}
 .dd-d1{animation-delay:.08s}.dd-d2{animation-delay:.15s}.dd-d3{animation-delay:.23s}
@@ -107,7 +127,7 @@ function authStatusInfo(s) {
     const map = {
         pending: { label: 'לא מאומת', color: '#F59E0B', bg: 'rgba(245,158,11,.12)', icon: '⚠️' },
         whatsapp_verified: { label: 'WA אומת', color: '#60A5FA', bg: 'rgba(96,165,250,.10)', icon: '✅' },
-        persona_in_progress: { label: 'KYC בתהליך', color: '#A78BFA', bg: 'rgba(167,139,250,.10)', icon: '🔄' },
+        persona_in_progress: { label: 'Sumsub בתהליך', color: '#A78BFA', bg: 'rgba(167,139,250,.10)', icon: '🔄' },
         persona_completed: { label: 'ממתין לאישור', color: '#FB923C', bg: 'rgba(251,146,60,.10)', icon: '⏳' },
         approved: { label: 'מאושר ✓', color: '#22C55E', bg: 'rgba(34,197,94,.12)', icon: '🏆' },
     };
@@ -167,14 +187,20 @@ function DocCard({ type, doc, onUploaded }) {
 export default function DriverDashboard() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
-    const [tab, setTab] = useState('home');
-    const [kycUrl, setKycUrl] = useState(() => localStorage.getItem('kyc_url'));
+    const [searchParams] = useSearchParams();
+    const [tab, setTab] = useState(() => searchParams.get('tab') === 'verify' ? 'verify' : 'home');
     const [authStatus, setAuthStatus] = useState(user?.auth_status ?? 'pending');
+    const [kycStatus, setKycStatus] = useState('not_started');
     const [profile, setProfile] = useState(null);
     const [docs, setDocs] = useState([]);
-    const [fullName, setFullName] = useState(user?.full_name ?? '');
-    const [savingProfile, setSavingProfile] = useState(false);
-    const [profileSaved, setProfileSaved] = useState(false);
+    const [sumsubData, setSumsubData] = useState(null);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [deleteLoading, setDeleteLoading] = useState(false);
+    const [deleteMsg, setDeleteMsg] = useState('');
+    const [vehicleNumber, setVehicleNumber] = useState('');
+    const [vehicleResult, setVehicleResult] = useState(null);
+    const [vehicleBusy, setVehicleBusy] = useState(false);
+    const [vehicleErr, setVehicleErr] = useState(null);
     const pollRef = useRef(null);
     useEffect(() => {
         const el = document.createElement('style');
@@ -199,9 +225,11 @@ export default function DriverDashboard() {
                 const d = await api.auth.driverKycStatus();
                 const s = d.auth_status || d.kyc_status;
                 setAuthStatus(s);
-                if (d.kyc_url) {
-                    setKycUrl(d.kyc_url);
-                    localStorage.setItem('kyc_url', d.kyc_url);
+                const ks = d.kyc_status;
+                setKycStatus(ks);
+                // Once we get a real status from server, clear the submitted flag
+                if (ks !== 'init' && ks !== 'not_started') {
+                    localStorage.removeItem('sumsub_submitted');
                 }
                 if (s === 'approved') {
                     if (pollRef.current)
@@ -211,12 +239,20 @@ export default function DriverDashboard() {
             catch { /* ignore */ }
         };
         poll();
-        pollRef.current = setInterval(poll, 15000);
+        pollRef.current = setInterval(poll, 10000);
         return () => { if (pollRef.current)
             clearInterval(pollRef.current); };
     }, []);
-    useEffect(() => { if (tab === 'verify')
-        loadCompliance(); }, [tab, loadCompliance]);
+    useEffect(() => {
+        if (tab === 'verify') {
+            loadCompliance();
+            api.sumsub.getMyData().then(setSumsubData).catch(() => null);
+        }
+    }, [tab, loadCompliance]);
+    // If user just returned from Sumsub and flag is set, treat as pending locally
+    const effectiveKycStatus = (kycStatus === 'init' || kycStatus === 'not_started') && localStorage.getItem('sumsub_submitted')
+        ? 'pending'
+        : kycStatus;
     const st = authStatusInfo(authStatus);
     const isApproved = authStatus === 'approved';
     const progPct = profile?.progress_pct ?? 0;
@@ -224,79 +260,43 @@ export default function DriverDashboard() {
     function latestDoc(type) {
         return docs.filter(d => d.document_type === type).sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime())[0];
     }
-    async function handleSaveProfile() {
-        if (!fullName.trim())
-            return;
-        setSavingProfile(true);
+    async function handleDeleteRequest() {
+        setDeleteLoading(true);
         try {
-            await api.auth.updateProfile({ full_name: fullName.trim() });
-            setProfileSaved(true);
-            setTimeout(() => setProfileSaved(false), 3000);
+            const r = await api.auth.deleteRequest();
+            setDeleteMsg(r.message);
+            setTimeout(() => { logout(); navigate('/login?role=driver', { replace: true }); }, 4000);
         }
-        catch { /* ignore */ }
+        catch {
+            setDeleteMsg('שגיאה בשליחת הבקשה. נסה שוב.');
+        }
         finally {
-            setSavingProfile(false);
+            setDeleteLoading(false);
         }
     }
-    const [kycLoading, setKycLoading] = useState(false);
     function handleLogout() { logout(); navigate('/login?role=driver', { replace: true }); }
-    function handleStartKyc() {
-        if (!kycUrl || kycLoading)
-            return;
-        let inquiryId = null;
-        let sessionToken = null;
-        try {
-            const parsed = new URL(kycUrl);
-            inquiryId = parsed.searchParams.get('inquiry-id');
-            sessionToken = parsed.searchParams.get('session-token');
-        }
-        catch { /* ignore */ }
-        if (!inquiryId) {
-            window.location.href = kycUrl;
-            return;
-        }
-        setKycLoading(true);
-        const iid = inquiryId;
-        const stok = sessionToken;
-        function openClient() {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const P = window.Persona;
-            if (!P?.Client) {
-                setKycLoading(false);
-                window.location.href = kycUrl;
-                return;
-            }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const cfg = {
-                inquiryId: iid,
-                onReady: () => { setKycLoading(false); client.open(); },
-                onComplete: () => { window.location.reload(); },
-                onCancel: () => { setKycLoading(false); },
-                onError: () => { setKycLoading(false); window.location.href = kycUrl; },
-            };
-            if (stok)
-                cfg.sessionToken = stok;
-            const client = new P.Client(cfg);
-        }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (window.Persona?.Client) {
-            openClient();
-            return;
-        }
-        if (document.getElementById('persona-sdk')) {
-            document.getElementById('persona-sdk').addEventListener('load', openClient, { once: true });
-            return;
-        }
-        const s = document.createElement('script');
-        s.id = 'persona-sdk';
-        s.src = 'https://cdn.withpersona.com/dist/persona-v5-latest.js';
-        s.addEventListener('load', openClient, { once: true });
-        s.addEventListener('error', () => { setKycLoading(false); window.location.href = kycUrl; }, { once: true });
-        document.head.appendChild(s);
-    }
-    return (_jsxs("div", { className: "dd", children: [kycLoading && (_jsxs("div", { style: {
-                    position: 'fixed', inset: 0, zIndex: 9999,
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    background: 'rgba(7,11,20,0.96)',
-                }, children: [_jsx("div", { style: { width: 48, height: 48, border: '4px solid rgba(255,255,255,.1)', borderTopColor: '#7C3AED', borderRadius: '50%', animation: 'ddSpin 1s linear infinite' } }), _jsx("p", { style: { marginTop: 20, color: '#94A3B8', fontFamily: 'Heebo,sans-serif', fontSize: '0.95rem' }, children: "\u05D8\u05D5\u05E2\u05DF \u05D0\u05D9\u05DE\u05D5\u05EA \u05D6\u05D4\u05D5\u05EA\u2026" })] })), _jsx("div", { className: "dd-bg" }), _jsxs("div", { className: "dd-hdr", children: [_jsxs("div", { className: "dd-logo", children: ["\uD83D\uDE95 Easy", _jsx("span", { style: { color: '#FDE047' }, children: "Taxi" }), " \u2014 \u05E0\u05D4\u05D2\u05D9\u05DD"] }), _jsx("button", { className: "dd-logout", onClick: handleLogout, children: "\u05D9\u05E6\u05D9\u05D0\u05D4" })] }), _jsxs("div", { className: "dd-body", children: [_jsxs("div", { className: "dd-tabs", children: [_jsx("button", { className: `dd-tab${tab === 'home' ? ' on' : ''}`, onClick: () => setTab('home'), children: "\uD83C\uDFE0 \u05E8\u05D0\u05E9\u05D9" }), _jsxs("button", { className: `dd-tab${tab === 'verify' ? ' on' : ''}`, onClick: () => setTab('verify'), children: ["\uD83D\uDCCB \u05D0\u05D9\u05DE\u05D5\u05EA ", pendingBadge !== null && pendingBadge > 0 && (_jsx("span", { style: { marginRight: 4, background: '#EF4444', borderRadius: '100px', padding: '1px 7px', fontSize: '.7rem', color: '#fff' }, children: pendingBadge }))] })] }), tab === 'home' && (_jsxs(_Fragment, { children: [_jsxs("div", { className: "dd-hero dd-ain", children: [_jsx("div", { className: "dd-phone", children: user?.phone }), _jsx("div", { className: "dd-name", children: user?.full_name ?? 'נהג EasyTaxi' }), _jsxs("div", { className: "dd-badge", style: { background: st.bg, color: st.color, border: `1px solid ${st.color}40` }, children: [_jsx("span", { children: st.icon }), st.label] })] }), _jsxs("div", { className: "dd-sec dd-ain dd-d1", children: [_jsx("div", { className: "dd-sec-title", children: "\u05E1\u05D8\u05D8\u05D9\u05E1\u05D8\u05D9\u05E7\u05D5\u05EA" }), _jsx("div", { className: "dd-stats", children: ['נסיעות', 'דירוג', 'השבוע'].map((l, i) => (_jsxs("div", { className: "dd-stat", children: [_jsx("div", { className: "dd-stat-n", children: i === 2 ? '₪0' : i === 1 ? '—' : '0' }), _jsx("div", { className: "dd-stat-l", children: l })] }, l))) })] }), _jsxs("div", { className: "dd-sec dd-ain dd-d2", children: [_jsx("div", { className: "dd-sec-title", children: "\u05E1\u05D8\u05D8\u05D5\u05E1 \u05D0\u05D9\u05DE\u05D5\u05EA" }), isApproved ? (_jsx("div", { style: { display: 'flex', alignItems: 'center', gap: 10, padding: 14, background: 'rgba(34,197,94,.1)', border: '1.5px solid rgba(34,197,94,.3)', borderRadius: 12, fontWeight: 700, color: '#22C55E' }, children: "\uD83C\uDFC6 \u05D4\u05D6\u05D4\u05D5\u05EA \u05D0\u05D5\u05DE\u05EA\u05D4 \u2014 \u05D0\u05EA\u05D4 \u05DE\u05D5\u05DB\u05DF \u05DC\u05E7\u05D1\u05DC \u05E0\u05E1\u05D9\u05E2\u05D5\u05EA!" })) : (_jsxs(_Fragment, { children: [_jsxs("div", { className: "dd-info", style: { marginTop: 0 }, children: ["\u05DB\u05D3\u05D9 \u05DC\u05E7\u05D1\u05DC \u05E0\u05E1\u05D9\u05E2\u05D5\u05EA, \u05E2\u05DC\u05D9\u05DA \u05DC\u05D4\u05E9\u05DC\u05D9\u05DD \u05D0\u05EA \u05EA\u05D4\u05DC\u05D9\u05DA \u05D4\u05D0\u05D9\u05DE\u05D5\u05EA. \u05E2\u05D1\u05D5\u05E8 \u05DC\u05DC\u05E9\u05D5\u05E0\u05D9\u05EA ", _jsx("strong", { children: "\u05D0\u05D9\u05DE\u05D5\u05EA" }), "."] }), _jsx("button", { className: "dd-btn dd-btn-purple", style: { marginTop: 12 }, onClick: () => setTab('verify'), children: "\uD83D\uDCCB \u05D4\u05E9\u05DC\u05DD \u05D0\u05D9\u05DE\u05D5\u05EA \u2190 \u05DC\u05D7\u05E5 \u05DB\u05D0\u05DF" })] }))] }), _jsxs("div", { className: "dd-sec dd-ain dd-d3", children: [_jsx("div", { className: "dd-sec-title", children: "\u05E2\u05D6\u05E8\u05D4 \u05D5\u05EA\u05DE\u05D9\u05DB\u05D4" }), _jsx("a", { href: "https://wa.me/447474775344?text=%D7%A9%D7%9C%D7%95%D7%9D%2C%20%D7%90%D7%A0%D7%99%20%D7%A0%D7%94%D7%92%20%D7%91-EasyTaxi%20%D7%95%D7%A6%D7%A8%D7%99%D7%9A%20%D7%A2%D7%96%D7%A8%D7%94", target: "_blank", rel: "noopener noreferrer", className: "dd-wa-btn", children: "\uD83D\uDCAC \u05E9\u05D0\u05DC \u05D0\u05EA \u05D4\u05EA\u05DE\u05D9\u05DB\u05D4 \u05D1\u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4" })] })] })), tab === 'verify' && (_jsxs(_Fragment, { children: [_jsxs("div", { className: "dd-prog-wrap dd-ain", children: [_jsxs("div", { className: "dd-prog-label", children: [_jsx("span", { className: "dd-prog-title", children: "\u05D4\u05EA\u05E7\u05D3\u05DE\u05D5\u05EA \u05D0\u05D9\u05DE\u05D5\u05EA" }), _jsxs("span", { className: "dd-prog-pct", children: [progPct, "%"] })] }), _jsx("div", { className: "dd-prog-bar-bg", children: _jsx("div", { className: "dd-prog-bar", style: { width: `${progPct}%` } }) }), profile && (_jsxs("div", { style: { marginTop: 10, fontSize: '.78rem', color: 'var(--muted)' }, children: ["\u05E6\u05D9\u05D5\u05DF \u05E6\u05D9\u05D5\u05EA: ", _jsxs("strong", { style: { color: '#60A5FA' }, children: [profile.compliance_score, "/100"] }), profile.block_reason && _jsxs("span", { style: { color: '#FCA5A5', marginRight: 8 }, children: ["\u26A0\uFE0F ", profile.block_reason] })] }))] }), _jsxs("div", { className: "dd-sec dd-ain dd-d1", children: [_jsx("div", { className: "dd-sec-title", children: "\u05E9\u05DC\u05D1 1 \u2014 \u05D0\u05D9\u05DE\u05D5\u05EA \u05D6\u05D4\u05D5\u05EA (Persona)" }), _jsx("p", { style: { fontSize: '.88rem', color: 'var(--muted)', marginBottom: 14, lineHeight: 1.6 }, children: "\u05D0\u05DE\u05EA \u05D0\u05EA \u05D6\u05D4\u05D5\u05EA\u05DA \u05E2\u05DD \u05EA\u05E2\u05D5\u05D3\u05EA \u05D6\u05D4\u05D5\u05EA / \u05D3\u05E8\u05DB\u05D5\u05DF + \u05E1\u05DC\u05E4\u05D9 \u05D7\u05D9. \u05E4\u05E2\u05D5\u05DC\u05D4 \u05D7\u05D3-\u05E4\u05E2\u05DE\u05D9\u05EA, \u05DC\u05D5\u05E7\u05D7\u05EA \u05DB-3 \u05D3\u05E7\u05D5\u05EA." }), kycUrl ? (_jsxs("button", { className: "dd-btn dd-btn-purple", onClick: handleStartKyc, disabled: kycLoading, children: ["\uD83E\uDEAA ", kycLoading ? 'טוען…' : authStatus === 'persona_in_progress' ? 'המשך אימות Persona' : 'התחל אימות Persona'] })) : (_jsx("div", { className: "dd-info", children: "\u23F3 \u05D8\u05D5\u05E2\u05DF \u05E7\u05D9\u05E9\u05D5\u05E8 Persona\u2026 \u05D0\u05DD \u05DC\u05D0 \u05E0\u05D8\u05E2\u05DF, \u05E6\u05D0 \u05D5\u05D4\u05D9\u05DB\u05E0\u05E1 \u05DE\u05D7\u05D3\u05E9." })), _jsx("div", { className: "dd-info", children: "\uD83D\uDEE1\uFE0F Persona \u00B7 ISO 27001 \u00B7 SOC 2 Type II \u2014 \u05D4\u05E0\u05EA\u05D5\u05E0\u05D9\u05DD \u05DE\u05D5\u05E2\u05D1\u05E8\u05D9\u05DD \u05D9\u05E9\u05D9\u05E8\u05D5\u05EA \u05DC-Persona." })] }), _jsxs("div", { className: "dd-sec dd-ain dd-d2", children: [_jsx("div", { className: "dd-sec-title", children: "\u05E9\u05DC\u05D1 2 \u2014 \u05E4\u05E8\u05D8\u05D9\u05DD \u05D0\u05D9\u05E9\u05D9\u05D9\u05DD" }), _jsxs("div", { className: "dd-field-row", children: [_jsx("label", { className: "dd-field-label", children: "\u05E9\u05DD \u05DE\u05DC\u05D0" }), _jsx("input", { className: "dd-field-input", placeholder: "\u05D9\u05E9\u05E8\u05D0\u05DC \u05D9\u05E9\u05E8\u05D0\u05DC\u05D9", value: fullName, onChange: e => setFullName(e.target.value) })] }), _jsx("button", { className: "dd-btn dd-btn-blue", onClick: handleSaveProfile, disabled: savingProfile || !fullName.trim(), children: profileSaved ? '✅ נשמר!' : savingProfile ? '⏳ שומר…' : '💾 שמור פרטים' })] }), _jsxs("div", { className: "dd-sec dd-ain dd-d3", children: [_jsx("div", { className: "dd-sec-title", children: "\u05E9\u05DC\u05D1 3 \u2014 \u05DE\u05E1\u05DE\u05DB\u05D9\u05DD \u05E0\u05D3\u05E8\u05E9\u05D9\u05DD" }), DOC_ORDER.map(type => (_jsx(DocCard, { type: type, doc: latestDoc(type), onUploaded: loadCompliance }, type)))] }), _jsx("div", { className: "dd-info dd-ain", style: { marginBottom: 14 }, children: "\uD83D\uDCCC \u05DC\u05D0\u05D7\u05E8 \u05D4\u05E2\u05DC\u05D0\u05EA \u05D4\u05DE\u05E1\u05DE\u05DB\u05D9\u05DD, \u05D4\u05DD \u05D9\u05D9\u05D1\u05D3\u05E7\u05D5 \u05E2\u05DC \u05D9\u05D3\u05D9 \u05E6\u05D5\u05D5\u05EA EasyTaxi \u05EA\u05D5\u05DA 1-2 \u05D9\u05DE\u05D9 \u05E2\u05E1\u05E7\u05D9\u05DD. \u05EA\u05E7\u05D1\u05DC \u05D4\u05D5\u05D3\u05E2\u05D4 \u05D1\u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4 \u05E2\u05DD \u05EA\u05D5\u05E6\u05D0\u05EA \u05D4\u05D1\u05D3\u05D9\u05E7\u05D4." })] }))] })] }));
+    return (_jsxs("div", { className: "dd", children: [_jsx("div", { className: "dd-bg" }), _jsxs("div", { className: "dd-hdr", children: [_jsxs("div", { className: "dd-logo", children: ["\uD83D\uDE95 Easy", _jsx("span", { style: { color: '#FDE047' }, children: "Taxi" }), " \u2014 \u05E0\u05D4\u05D2\u05D9\u05DD"] }), _jsx("button", { className: "dd-logout", onClick: handleLogout, children: "\u05D9\u05E6\u05D9\u05D0\u05D4" })] }), _jsxs("div", { className: "dd-body", children: [_jsxs("div", { className: "dd-tabs", children: [_jsx("button", { className: `dd-tab${tab === 'home' ? ' on' : ''}`, onClick: () => setTab('home'), children: "\uD83C\uDFE0 \u05E8\u05D0\u05E9\u05D9" }), _jsxs("button", { className: `dd-tab${tab === 'verify' ? ' on' : ''}`, onClick: () => setTab('verify'), children: ["\uD83D\uDCCB \u05D0\u05D9\u05DE\u05D5\u05EA ", pendingBadge !== null && pendingBadge > 0 && (_jsx("span", { style: { marginRight: 4, background: '#EF4444', borderRadius: '100px', padding: '1px 7px', fontSize: '.7rem', color: '#fff' }, children: pendingBadge }))] })] }), tab === 'home' && (_jsxs(_Fragment, { children: [_jsxs("div", { className: "dd-hero dd-ain", children: [_jsx("div", { className: "dd-phone", children: user?.phone }), _jsx("div", { className: "dd-name", children: user?.full_name ?? 'נהג EasyTaxi' }), _jsxs("div", { className: "dd-badge", style: { background: st.bg, color: st.color, border: `1px solid ${st.color}40` }, children: [_jsx("span", { children: st.icon }), st.label] })] }), _jsxs("div", { className: "dd-sec dd-ain dd-d1", children: [_jsx("div", { className: "dd-sec-title", children: "\u05E1\u05D8\u05D8\u05D9\u05E1\u05D8\u05D9\u05E7\u05D5\u05EA" }), _jsx("div", { className: "dd-stats", children: ['נסיעות', 'דירוג', 'השבוע'].map((l, i) => (_jsxs("div", { className: "dd-stat", children: [_jsx("div", { className: "dd-stat-n", children: i === 2 ? '₪0' : i === 1 ? '—' : '0' }), _jsx("div", { className: "dd-stat-l", children: l })] }, l))) })] }), _jsxs("div", { className: "dd-sec dd-ain dd-d2", children: [_jsx("div", { className: "dd-sec-title", children: "\u05E1\u05D8\u05D8\u05D5\u05E1 \u05D0\u05D9\u05DE\u05D5\u05EA" }), isApproved ? (_jsx("div", { style: { display: 'flex', alignItems: 'center', gap: 10, padding: 14, background: 'rgba(34,197,94,.1)', border: '1.5px solid rgba(34,197,94,.3)', borderRadius: 12, fontWeight: 700, color: '#22C55E' }, children: "\uD83C\uDFC6 \u05D4\u05D6\u05D4\u05D5\u05EA \u05D0\u05D5\u05DE\u05EA\u05D4 \u2014 \u05D0\u05EA\u05D4 \u05DE\u05D5\u05DB\u05DF \u05DC\u05E7\u05D1\u05DC \u05E0\u05E1\u05D9\u05E2\u05D5\u05EA!" })) : (_jsxs(_Fragment, { children: [_jsxs("div", { className: "dd-info", style: { marginTop: 0 }, children: ["\u05DB\u05D3\u05D9 \u05DC\u05E7\u05D1\u05DC \u05E0\u05E1\u05D9\u05E2\u05D5\u05EA, \u05E2\u05DC\u05D9\u05DA \u05DC\u05D4\u05E9\u05DC\u05D9\u05DD \u05D0\u05EA \u05EA\u05D4\u05DC\u05D9\u05DA \u05D4\u05D0\u05D9\u05DE\u05D5\u05EA. \u05E2\u05D1\u05D5\u05E8 \u05DC\u05DC\u05E9\u05D5\u05E0\u05D9\u05EA ", _jsx("strong", { children: "\u05D0\u05D9\u05DE\u05D5\u05EA" }), "."] }), _jsx("button", { className: "dd-btn dd-btn-purple", style: { marginTop: 12 }, onClick: () => setTab('verify'), children: "\uD83D\uDCCB \u05D4\u05E9\u05DC\u05DD \u05D0\u05D9\u05DE\u05D5\u05EA \u2190 \u05DC\u05D7\u05E5 \u05DB\u05D0\u05DF" })] }))] }), _jsxs("div", { className: "dd-sec dd-ain dd-d3", children: [_jsx("div", { className: "dd-sec-title", children: "\u05E2\u05D6\u05E8\u05D4 \u05D5\u05EA\u05DE\u05D9\u05DB\u05D4" }), _jsx("a", { href: "https://wa.me/447474775344?text=%D7%A9%D7%9C%D7%95%D7%9D%2C%20%D7%90%D7%A0%D7%99%20%D7%A0%D7%94%D7%92%20%D7%91-EasyTaxi%20%D7%95%D7%A6%D7%A8%D7%99%D7%9A%20%D7%A2%D7%96%D7%A8%D7%94", target: "_blank", rel: "noopener noreferrer", className: "dd-wa-btn", children: "\uD83D\uDCAC \u05E9\u05D0\u05DC \u05D0\u05EA \u05D4\u05EA\u05DE\u05D9\u05DB\u05D4 \u05D1\u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4" })] })] })), tab === 'verify' && (_jsxs(_Fragment, { children: [_jsxs("div", { className: "dd-prog-wrap dd-ain", children: [_jsxs("div", { className: "dd-prog-label", children: [_jsx("span", { className: "dd-prog-title", children: "\u05D4\u05EA\u05E7\u05D3\u05DE\u05D5\u05EA \u05D0\u05D9\u05DE\u05D5\u05EA" }), _jsxs("span", { className: "dd-prog-pct", children: [progPct, "%"] })] }), _jsx("div", { className: "dd-prog-bar-bg", children: _jsx("div", { className: "dd-prog-bar", style: { width: `${progPct}%` } }) }), profile && (_jsxs("div", { style: { marginTop: 10, fontSize: '.78rem', color: 'var(--muted)' }, children: ["\u05E6\u05D9\u05D5\u05DF \u05E6\u05D9\u05D5\u05EA: ", _jsxs("strong", { style: { color: '#60A5FA' }, children: [profile.compliance_score, "/100"] }), profile.block_reason && _jsxs("span", { style: { color: '#FCA5A5', marginRight: 8 }, children: ["\u26A0\uFE0F ", profile.block_reason] })] }))] }), _jsxs("div", { className: "dd-sec dd-ain dd-d1", children: [_jsx("div", { className: "dd-sec-title", children: "\u05E9\u05DC\u05D1 1 \u2014 \u05D0\u05D9\u05DE\u05D5\u05EA \u05D6\u05D4\u05D5\u05EA (Sumsub)" }), (effectiveKycStatus === 'completed' || authStatus === 'persona_completed' || authStatus === 'approved') ? (_jsx("div", { className: "dd-step-done", children: "\u2705 \u05D0\u05D9\u05DE\u05D5\u05EA \u05D6\u05D4\u05D5\u05EA \u05D4\u05D5\u05E9\u05DC\u05DD \u05D1\u05D4\u05E6\u05DC\u05D7\u05D4" })) : effectiveKycStatus === 'pending' ? (_jsxs("div", { className: "dd-step-pending", children: ["\u23F3 \u05D4\u05DE\u05E1\u05DE\u05DB\u05D9\u05DD \u05D4\u05D5\u05D2\u05E9\u05D5 \u2014 \u05DE\u05DE\u05EA\u05D9\u05E0\u05D9\u05DD \u05DC\u05D0\u05D9\u05E9\u05D5\u05E8 Sumsub", _jsx("span", { style: { display: 'block', fontSize: '.78rem', fontWeight: 400, marginTop: 4, color: '#FDE68A' }, children: "\u05D1\u05D3\u05E8\u05DA \u05DB\u05DC\u05DC \u05DC\u05D5\u05E7\u05D7 \u05E2\u05D3 \u05DE\u05E1\u05E4\u05E8 \u05D3\u05E7\u05D5\u05EA. \u05D4\u05D3\u05E3 \u05D9\u05EA\u05E8\u05E2\u05E0\u05DF \u05D0\u05D5\u05D8\u05D5\u05DE\u05D8\u05D9\u05EA." })] })) : effectiveKycStatus === 'rejected' ? (_jsxs("div", { className: "dd-err", style: { marginBottom: 10 }, children: ["\u274C \u05D0\u05D9\u05DE\u05D5\u05EA \u05E0\u05D3\u05D7\u05D4 \u2014 ", sumsubData?.review_result === 'RED' ? 'בעיה במסמכים. ניתן לנסות שוב.' : 'פנה לתמיכה'] })) : effectiveKycStatus === 'on_hold' ? (_jsx("div", { className: "dd-step-pending", children: "\uD83D\uDD12 \u05D4\u05D0\u05D9\u05DE\u05D5\u05EA \u05D4\u05D5\u05E2\u05D1\u05E8 \u05DC\u05D1\u05D3\u05D9\u05E7\u05D4 \u05D9\u05D3\u05E0\u05D9\u05EA \u2014 \u05E0\u05D7\u05D6\u05D5\u05E8 \u05D0\u05DC\u05D9\u05DA \u05D1\u05E7\u05E8\u05D5\u05D1" })) : null, authStatus !== 'approved' && (_jsxs(_Fragment, { children: [(effectiveKycStatus === 'not_started' || effectiveKycStatus === 'init') && (_jsx("p", { style: { fontSize: '.88rem', color: 'var(--muted)', marginBottom: 14, lineHeight: 1.6 }, children: "\u05D0\u05DE\u05EA \u05D0\u05EA \u05D6\u05D4\u05D5\u05EA\u05DA \u05E2\u05DD \u05EA\u05E2\u05D5\u05D3\u05EA \u05D6\u05D4\u05D5\u05EA / \u05D3\u05E8\u05DB\u05D5\u05DF + \u05E1\u05DC\u05E4\u05D9 \u05D7\u05D9. \u05DC\u05D5\u05E7\u05D7\u05EA \u05DB-3 \u05D3\u05E7\u05D5\u05EA." })), _jsx("button", { className: `dd-btn ${effectiveKycStatus === 'rejected' ? 'dd-btn-blue' : 'dd-btn-purple'}`, style: { marginTop: effectiveKycStatus === 'pending' || effectiveKycStatus === 'on_hold' ? 12 : 0 }, onClick: () => navigate('/verify'), children: effectiveKycStatus === 'rejected'
+                                                    ? '🔄 נסה שוב — פתח אימות מחדש'
+                                                    : effectiveKycStatus === 'pending'
+                                                        ? '🔍 פתח את תהליך האימות שוב'
+                                                        : effectiveKycStatus === 'on_hold'
+                                                            ? '📋 פתח תהליך האימות לבדיקה'
+                                                            : effectiveKycStatus === 'init'
+                                                                ? '🪪 המשך אימות Sumsub'
+                                                                : '🪪 התחל אימות Sumsub' })] })), sumsubData && sumsubData.extracted && (sumsubData.extracted.first_name || sumsubData.extracted.id_number) && (_jsxs("div", { className: "dd-id-card", children: [_jsx("div", { className: "dd-id-card-title", children: "\uD83E\uDEAA \u05E4\u05E8\u05D8\u05D9\u05DD \u05E9\u05E0\u05D0\u05E1\u05E4\u05D5 \u05DE-Sumsub" }), _jsxs("div", { className: "dd-id-grid", children: [sumsubData.extracted.first_name && (_jsxs("div", { className: "dd-id-field", children: [_jsx("div", { className: "dd-id-label", children: "\u05E9\u05DD \u05E4\u05E8\u05D8\u05D9" }), _jsx("div", { className: "dd-id-value", children: sumsubData.extracted.first_name })] })), sumsubData.extracted.last_name && (_jsxs("div", { className: "dd-id-field", children: [_jsx("div", { className: "dd-id-label", children: "\u05E9\u05DD \u05DE\u05E9\u05E4\u05D7\u05D4" }), _jsx("div", { className: "dd-id-value", children: sumsubData.extracted.last_name })] })), sumsubData.extracted.date_of_birth && (_jsxs("div", { className: "dd-id-field", children: [_jsx("div", { className: "dd-id-label", children: "\u05EA\u05D0\u05E8\u05D9\u05DA \u05DC\u05D9\u05D3\u05D4" }), _jsx("div", { className: "dd-id-value", children: sumsubData.extracted.date_of_birth })] })), sumsubData.extracted.id_number && (_jsxs("div", { className: "dd-id-field", children: [_jsx("div", { className: "dd-id-label", children: "\u05DE\u05E1\u05E4\u05E8 \u05E8\u05D9\u05E9\u05D9\u05D5\u05DF \u05E0\u05D4\u05D9\u05D2\u05D4" }), _jsx("div", { className: "dd-id-value", children: sumsubData.extracted.id_number })] })), sumsubData.extracted.id_expiry && (_jsxs("div", { className: "dd-id-field", children: [_jsx("div", { className: "dd-id-label", children: "\u05EA\u05D5\u05E7\u05E3 \u05EA\u05E2\u05D5\u05D3\u05D4" }), _jsx("div", { className: "dd-id-value", children: sumsubData.extracted.id_expiry })] })), sumsubData.extracted.issuing_country && (_jsxs("div", { className: "dd-id-field", children: [_jsx("div", { className: "dd-id-label", children: "\u05DE\u05D3\u05D9\u05E0\u05D4 \u05DE\u05E0\u05E4\u05D9\u05E7\u05D4" }), _jsx("div", { className: "dd-id-value", children: sumsubData.extracted.issuing_country })] }))] })] })), _jsx("div", { className: "dd-info", children: "\uD83D\uDEE1\uFE0F Sumsub \u00B7 ISO 27001 \u00B7 SOC 2 Type II \u2014 \u05D4\u05E0\u05EA\u05D5\u05E0\u05D9\u05DD \u05DE\u05D5\u05E2\u05D1\u05E8\u05D9\u05DD \u05D9\u05E9\u05D9\u05E8\u05D5\u05EA \u05DC-Sumsub." })] }), _jsxs("div", { className: "dd-sec dd-ain", style: { animationDelay: '.12s' }, children: [_jsx("div", { className: "dd-sec-title", children: "\u05E8\u05D9\u05E9\u05D5\u05DD \u05E8\u05DB\u05D1 \u2014 \u05D0\u05D9\u05DE\u05D5\u05EA \u05DE\u05D5\u05DC \u05DE\u05D0\u05D2\u05E8 \u05D4\u05DE\u05DE\u05E9\u05DC\u05D4" }), _jsxs("div", { className: "dd-field-row", children: [_jsx("label", { className: "dd-field-label", children: "\u05DE\u05E1\u05E4\u05E8 \u05DC\u05D5\u05D7\u05D9\u05EA \u05E8\u05D9\u05E9\u05D5\u05D9 (\u05DC\u05D3\u05D5\u05D2\u05DE\u05D4: 12-345-67)" }), _jsxs("div", { style: { display: 'flex', gap: 8 }, children: [_jsx("input", { className: "dd-field-input", placeholder: "12-345-67", value: vehicleNumber, onChange: e => setVehicleNumber(e.target.value), style: { flex: 1 }, maxLength: 10, dir: "ltr" }), _jsx("button", { className: "dd-btn dd-btn-blue", style: { width: 'auto', padding: '0 18px', minWidth: 90 }, disabled: vehicleBusy || vehicleNumber.length < 5, onClick: async () => {
+                                                            setVehicleBusy(true);
+                                                            setVehicleErr(null);
+                                                            setVehicleResult(null);
+                                                            try {
+                                                                const r = await api.vehicle.check(vehicleNumber.replace(/-/g, ''));
+                                                                setVehicleResult(r);
+                                                            }
+                                                            catch (e) {
+                                                                setVehicleErr(e.message);
+                                                            }
+                                                            finally {
+                                                                setVehicleBusy(false);
+                                                            }
+                                                        }, children: vehicleBusy ? '⏳' : '🔍 בדוק' })] })] }), vehicleErr && _jsx("div", { className: "dd-err", children: vehicleErr }), vehicleResult && (vehicleResult.found ? (_jsxs("div", { style: { background: 'rgba(34,197,94,.07)', border: '1px solid rgba(34,197,94,.25)', borderRadius: 12, padding: '14px 16px', marginTop: 10 }, children: [_jsxs("div", { style: { fontWeight: 700, color: '#22C55E', marginBottom: 8, fontSize: '.88rem' }, children: ["\u2705 \u05D4\u05E8\u05DB\u05D1 \u05E0\u05DE\u05E6\u05D0 \u05D1\u05DE\u05D0\u05D2\u05E8", vehicleResult.is_taxi ? ' — מונית/תחב"צ' : '', vehicleResult.is_removed && _jsx("span", { style: { color: '#EF4444', marginRight: 8 }, children: "\u26A0 \u05D4\u05D5\u05E1\u05E8 \u05DE\u05D4\u05DB\u05D1\u05D9\u05E9" })] }), _jsxs("div", { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: '.82rem', color: 'var(--muted)' }, children: [vehicleResult.manufacturer && _jsxs("div", { children: [_jsx("strong", { children: "\u05D9\u05E6\u05E8\u05DF:" }), " ", vehicleResult.manufacturer] }), vehicleResult.model && _jsxs("div", { children: [_jsx("strong", { children: "\u05D3\u05D2\u05DD:" }), " ", vehicleResult.model] }), vehicleResult.color && _jsxs("div", { children: [_jsx("strong", { children: "\u05E6\u05D1\u05E2:" }), " ", vehicleResult.color] }), vehicleResult.year && _jsxs("div", { children: [_jsx("strong", { children: "\u05E9\u05E0\u05D4:" }), " ", vehicleResult.year] }), vehicleResult.test_expiry && _jsxs("div", { children: [_jsx("strong", { children: "\u05D8\u05E1\u05D8 \u05E2\u05D3:" }), " ", vehicleResult.test_expiry] })] }), vehicleResult.warnings && vehicleResult.warnings.length > 0 && (_jsx("div", { style: { marginTop: 10, fontSize: '.8rem', color: '#FCA5A5' }, children: vehicleResult.warnings.map((w, i) => _jsxs("div", { children: ["\u26A0 ", w] }, i)) }))] })) : (_jsx("div", { className: "dd-err", children: "\uD83D\uDD0D \u05D4\u05E8\u05DB\u05D1 \u05DC\u05D0 \u05E0\u05DE\u05E6\u05D0 \u05D1\u05DE\u05D0\u05D2\u05E8. \u05D1\u05D3\u05D5\u05E7 \u05D0\u05EA \u05DE\u05E1\u05E4\u05E8 \u05D4\u05DC\u05D5\u05D7\u05D9\u05EA." })))] }), _jsxs("div", { className: "dd-sec dd-ain dd-d2", children: [_jsx("div", { className: "dd-sec-title", children: "\u05E9\u05DC\u05D1 2 \u2014 \u05DE\u05E1\u05DE\u05DB\u05D9\u05DD \u05E0\u05D3\u05E8\u05E9\u05D9\u05DD" }), DOC_ORDER.map(type => (_jsx(DocCard, { type: type, doc: latestDoc(type), onUploaded: loadCompliance }, type)))] }), _jsx("div", { className: "dd-info dd-ain", style: { marginBottom: 14 }, children: "\uD83D\uDCCC \u05DC\u05D0\u05D7\u05E8 \u05D4\u05E2\u05DC\u05D0\u05EA \u05D4\u05DE\u05E1\u05DE\u05DB\u05D9\u05DD, \u05D4\u05DD \u05D9\u05D9\u05D1\u05D3\u05E7\u05D5 \u05E2\u05DC \u05D9\u05D3\u05D9 \u05E6\u05D5\u05D5\u05EA EasyTaxi \u05EA\u05D5\u05DA 1-2 \u05D9\u05DE\u05D9 \u05E2\u05E1\u05E7\u05D9\u05DD. \u05EA\u05E7\u05D1\u05DC \u05D4\u05D5\u05D3\u05E2\u05D4 \u05D1\u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4 \u05E2\u05DD \u05EA\u05D5\u05E6\u05D0\u05EA \u05D4\u05D1\u05D3\u05D9\u05E7\u05D4." }), _jsxs("div", { className: "dd-sec dd-ain", style: { animationDelay: '.3s', borderColor: 'rgba(239,68,68,.15)' }, children: [_jsx("div", { className: "dd-sec-title", style: { color: '#FCA5A5' }, children: "\u05E4\u05E8\u05D8\u05D9\u05D5\u05EA \u05D5\u05DE\u05D7\u05D9\u05E7\u05EA \u05E0\u05EA\u05D5\u05E0\u05D9\u05DD" }), _jsx("p", { style: { fontSize: '.83rem', color: 'var(--muted)', lineHeight: 1.65, marginBottom: 14 }, children: "\u05D1\u05D4\u05EA\u05D0\u05DD \u05DC\u05D7\u05D5\u05E7 \u05D4\u05D2\u05E0\u05EA \u05D4\u05E4\u05E8\u05D8\u05D9\u05D5\u05EA, \u05D9\u05E9 \u05DC\u05DA \u05D6\u05DB\u05D5\u05EA \u05DC\u05D1\u05E7\u05E9 \u05DE\u05D7\u05D9\u05E7\u05EA \u05DB\u05DC \u05D4\u05E0\u05EA\u05D5\u05E0\u05D9\u05DD \u05E9\u05DC\u05DA \u05DE\u05D4\u05E4\u05DC\u05D8\u05E4\u05D5\u05E8\u05DE\u05D4. \u05D4\u05D1\u05E7\u05E9\u05D4 \u05EA\u05D8\u05D5\u05E4\u05DC \u05EA\u05D5\u05DA 30 \u05D9\u05D5\u05DD. \u05DC\u05D0\u05D7\u05E8 \u05DE\u05D7\u05D9\u05E7\u05EA \u05D4\u05E0\u05EA\u05D5\u05E0\u05D9\u05DD, \u05D4\u05D7\u05E9\u05D1\u05D5\u05DF \u05E9\u05DC\u05DA \u05D9\u05D5\u05E1\u05E8 \u05DC\u05E6\u05DE\u05D9\u05EA\u05D5\u05EA." }), _jsx("button", { className: "dd-btn dd-btn-red", onClick: () => setShowDeleteModal(true), children: "\uD83D\uDDD1\uFE0F \u05D1\u05E7\u05E9\u05EA \u05DE\u05D7\u05D9\u05E7\u05EA \u05E0\u05EA\u05D5\u05E0\u05D9\u05DD \u05D5\u05D9\u05E6\u05D9\u05D0\u05D4 \u05DE\u05D4\u05E4\u05DC\u05D8\u05E4\u05D5\u05E8\u05DE\u05D4" })] })] }))] }), showDeleteModal && (_jsx("div", { className: "dd-modal-overlay", onClick: () => { if (!deleteLoading)
+                    setShowDeleteModal(false); }, children: _jsx("div", { className: "dd-modal", onClick: e => e.stopPropagation(), children: deleteMsg ? (_jsxs(_Fragment, { children: [_jsx("div", { className: "dd-modal-title", children: "\u2705 \u05D4\u05D1\u05E7\u05E9\u05D4 \u05D4\u05EA\u05E7\u05D1\u05DC\u05D4" }), _jsxs("div", { className: "dd-modal-body", children: [deleteMsg, _jsx("br", {}), "\u05DE\u05E2\u05D1\u05D9\u05E8 \u05D0\u05D5\u05EA\u05DA \u05DC\u05D4\u05EA\u05D7\u05D1\u05E8\u05D5\u05EA..."] })] })) : (_jsxs(_Fragment, { children: [_jsx("div", { className: "dd-modal-title", children: "\uD83D\uDDD1\uFE0F \u05DE\u05D7\u05D9\u05E7\u05EA \u05E0\u05EA\u05D5\u05E0\u05D9\u05DD" }), _jsxs("div", { className: "dd-modal-body", children: ["\u05D4\u05D0\u05DD \u05D0\u05EA\u05D4 \u05D1\u05D8\u05D5\u05D7 \u05E9\u05D1\u05E8\u05E6\u05D5\u05E0\u05DA \u05DC\u05DE\u05D7\u05D5\u05E7 \u05D0\u05EA \u05DB\u05DC \u05D4\u05E0\u05EA\u05D5\u05E0\u05D9\u05DD \u05E9\u05DC\u05DA \u05D5\u05DC\u05E2\u05D6\u05D5\u05D1 \u05D0\u05EA \u05D4\u05E4\u05DC\u05D8\u05E4\u05D5\u05E8\u05DE\u05D4?", _jsx("br", {}), _jsx("strong", { style: { color: '#EF4444' }, children: "\u05E4\u05E2\u05D5\u05DC\u05D4 \u05D6\u05D5 \u05D1\u05DC\u05EA\u05D9 \u05D4\u05E4\u05D9\u05DB\u05D4." })] }), _jsxs("div", { className: "dd-modal-actions", children: [_jsx("button", { className: "dd-btn dd-btn-red", onClick: handleDeleteRequest, disabled: deleteLoading, children: deleteLoading ? '⏳ שולח בקשה...' : '✅ כן, מחק את הנתונים שלי' }), _jsx("button", { className: "dd-btn", style: { background: 'rgba(255,255,255,.06)', color: 'var(--muted)' }, onClick: () => setShowDeleteModal(false), disabled: deleteLoading, children: "\u2190 \u05D1\u05D9\u05D8\u05D5\u05DC" })] })] })) }) }))] }));
 }

@@ -1,19 +1,21 @@
 import uuid
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Optional
 
+from core.config import settings
 from core.database import get_db
 from core.security import decode_access_token
 from models.user import User, UserRole
 
-_bearer = HTTPBearer()
+_bearer = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """Validate Bearer token and return the authenticated User."""
@@ -22,6 +24,8 @@ async def get_current_user(
         detail="Invalid or expired token",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    if not credentials:
+        raise exc
     try:
         payload = decode_access_token(credentials.credentials)
         if payload.get("type") != "access":
@@ -57,3 +61,44 @@ def require_roles(*roles: UserRole):
         return current_user
 
     return _check
+
+
+async def require_admin_key(
+    x_admin_key: Optional[str] = Header(default=None),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """
+    Accept either:
+      - X-Admin-Key header matching EVOLUTION_API_KEY  → returns the admin User from DB
+      - Bearer JWT token with admin role               → returns the authenticated User
+    """
+    from sqlalchemy import select
+    from models.user import UserRole as _Role
+
+    # Try JWT Bearer first
+    if credentials:
+        try:
+            payload = decode_access_token(credentials.credentials)
+            if payload.get("type") == "access" and payload.get("role") == _Role.admin.value:
+                user_id = payload.get("sub")
+                if user_id:
+                    user = await db.get(User, uuid.UUID(user_id))
+                    if user and user.is_active:
+                        return user
+        except JWTError:
+            pass
+
+    # Try X-Admin-Key
+    if x_admin_key and x_admin_key == settings.EVOLUTION_API_KEY:
+        result = await db.execute(
+            select(User).where(User.role == _Role.admin, User.is_active == True)
+        )
+        admin_user = result.scalars().first()
+        if admin_user:
+            return admin_user
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Admin access required",
+    )

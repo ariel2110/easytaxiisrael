@@ -12,6 +12,8 @@ import DriverDashboard from './pages/DriverDashboard'
 import AdminPanel from './pages/AdminPanel'
 import FAQ from './pages/FAQ'
 import Profile from './pages/Profile'
+import KYCVerification from './pages/KYCVerification'
+import InstallBanner from './components/InstallBanner'
 
 const Loader = () => (
   <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '1rem', background: 'var(--bg-primary)' }}>
@@ -34,15 +36,11 @@ function RequireDriverAuth({ children }: { children: JSX.Element }) {
   return children
 }
 
-function RequireAdminAuth({ children }: { children: JSX.Element }) {
-  const { user, loading } = useAuth()
-  if (loading) return <Loader />
-  if (!user || user.role !== 'admin') return <Navigate to="/" replace />
-  return children
-}
 
 export default function App() {
   return (
+    <>
+    <InstallBanner />
     <BrowserRouter>
       <Routes>
         {/* Public */}
@@ -56,6 +54,7 @@ export default function App() {
 
         {/* Driver dashboard (auth required) */}
         <Route path="/driver" element={<RequireDriverAuth><DriverDashboard /></RequireDriverAuth>} />
+        <Route path="/verify" element={<KYCVerification />} />
 
         {/* Passenger app (auth required) */}
         <Route path="/app" element={<RequireAuth><RequestRide /></RequireAuth>} />
@@ -63,12 +62,13 @@ export default function App() {
         <Route path="/ride/:rideId" element={<RequireAuth><ActiveRide /></RequireAuth>} />
 
         {/* Admin panel */}
-        <Route path="/admin" element={<RequireAdminAuth><AdminPanel /></RequireAdminAuth>} />
+        <Route path="/admin" element={<AdminPanel />} />
 
         {/* Legacy redirect */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
+    </>
   )
 }
 

@@ -124,7 +124,7 @@ async def poll_wa_auth(
             return WAAuthPollResponse(status="pending")
         return WAAuthPollResponse(status="expired")
 
-    # Completed — guide driver to new KYC flow
+    # Completed — guide driver to Sumsub verification
     kyc_url: str | None = None
     if result.get("role") == UserRole.driver.value:
         from core.security import decode_access_token
@@ -139,7 +139,7 @@ async def poll_wa_auth(
                 await db.commit()
         except Exception:
             pass
-        kyc_url = "/kyc/application"
+        kyc_url = "/verify"  # frontend Sumsub WebSDK page
 
     return WAAuthPollResponse(
         status="completed",
@@ -212,13 +212,13 @@ async def verify_otp_and_login(
                 ip_address=request.client.host if request.client else None)
     await db.commit()
 
-    # ── KYC: guide driver to new dual-agent verification flow ──
+    # ── Sumsub KYC: guide driver to verification page ──
     kyc_url: str | None = None
     if user.role == UserRole.driver:
         if user.auth_status == AuthStatus.pending:
             user.auth_status = AuthStatus.persona_in_progress
             await db.commit()
-        kyc_url = "/kyc/application"
+        kyc_url = "/verify"  # frontend Sumsub WebSDK page
 
     return TokenResponse(
         access_token=access,
@@ -270,27 +270,41 @@ async def admin_login(
 
 @router.get(
     "/driver/kyc-status",
-    summary="Poll driver KYC status from Persona",
+    summary="Poll driver KYC / Sumsub verification status",
 )
 async def driver_kyc_status(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """
-    Returns the latest Persona inquiry status for the authenticated driver.
+    Returns the current Sumsub verification status for the authenticated driver.
     Frontend polls this every ~10 seconds from DriverPending.tsx.
     """
     if current_user.role != UserRole.driver:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Drivers only")
 
-    inquiry = await persona_svc.get_latest_inquiry(db, current_user.id)
-    if inquiry is None:
-        return {"kyc_status": "not_started", "inquiry_id": None, "auth_status": current_user.auth_status.value}
+    from sqlalchemy import select
+    from models.sumsub import SumsubApplicant
+    result = await db.execute(
+        select(SumsubApplicant)
+        .where(SumsubApplicant.driver_id == current_user.id)
+        .order_by(SumsubApplicant.created_at.desc())
+        .limit(1)
+    )
+    applicant = result.scalar_one_or_none()
+
+    if applicant is None:
+        return {
+            "kyc_status": "not_started",
+            "kyc_url": "/verify",
+            "auth_status": current_user.auth_status.value,
+        }
 
     return {
-        "kyc_status": inquiry.status.value,
-        "inquiry_id": inquiry.persona_inquiry_id,
-        "kyc_url": _build_inquiry_url(inquiry),
+        "kyc_status": applicant.status.value,
+        "kyc_url": "/verify",
+        "level_name": applicant.level_name,
+        "review_result": applicant.review_result,
         "auth_status": current_user.auth_status.value,
     }
 
@@ -352,3 +366,38 @@ async def update_profile(
     await db.commit()
     await db.refresh(current_user)
     return current_user
+
+
+@router.post(
+    "/auth/delete-request",
+    summary="בקשת מחיקת נתונים ויציאה מהפלטפורמה (GDPR)",
+    status_code=200,
+)
+async def delete_account_request(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Mark account as deletion-requested and notify admin via WhatsApp."""
+    import logging
+    log = logging.getLogger(__name__)
+
+    # Deactivate account immediately so user can't log in again
+    current_user.is_active = False
+    await db.commit()
+
+    # Notify admin
+    try:
+        admin_phone = "+972546363350"  # platform admin
+        msg = (
+            f"🗑️ *בקשת מחיקת נתונים*\n\n"
+            f"נהג ביקש מחיקת חשבון:\n"
+            f"• שם: {current_user.full_name or 'לא ידוע'}\n"
+            f"• מזהה: {current_user.id}\n"
+            f"• תאריך: {__import__('datetime').datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC\n\n"
+            f"יש לטפל בבקשה תוך 30 יום בהתאם לחוק."
+        )
+        await whatsapp_svc.send_text(admin_phone, msg)
+    except Exception as exc:
+        log.warning("delete-request: WhatsApp notification failed: %s", exc)
+
+    return {"ok": True, "message": "בקשתך למחיקת נתונים התקבלה. נטפל בה תוך 30 יום."}

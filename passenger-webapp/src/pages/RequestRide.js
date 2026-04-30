@@ -8,7 +8,7 @@ import SurgeIndicator from '../components/SurgeIndicator';
 const DEFAULT_COORDS = { lat: 32.0853, lng: 34.7818 };
 const TOS_KEY = 'easytaxi_tos_v1';
 // ─── Terms of Service Modal ─────────────────────────────────────────────────
-function TosModal({ onAccept, onClose }) {
+function TosModal({ onAccept }) {
     const [scrolled, setScrolled] = useState(false);
     const [accepted, setAccepted] = useState(false);
     const bodyRef = useRef(null);
@@ -81,12 +81,7 @@ function TosModal({ onAccept, onClose }) {
                                         transition: 'all .3s',
                                         boxShadow: scrolled ? '0 4px 20px rgba(245,158,11,.4)' : 'none',
                                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                                    }, children: scrolled ? '✅ אני מסכים/ה לתנאי השימוש' : '⟵ קרא את התנאים עד הסוף' }), _jsx("button", { onClick: onClose, style: {
-                                        width: '100%', padding: '11px',
-                                        background: 'transparent', border: '1px solid rgba(255,255,255,.08)',
-                                        borderRadius: 12, color: '#64748B', fontWeight: 600, fontSize: '.88rem',
-                                        cursor: 'pointer',
-                                    }, children: "\u05E1\u05D2\u05D5\u05E8 \u2014 \u05D0\u05D7\u05E8 \u05DB\u05DA" })] })) })] })] }));
+                                    }, children: scrolled ? '✅ אני מסכים/ה לתנאי השימוש' : '⟵ קרא את התנאים עד הסוף' }), _jsx("div", { style: { textAlign: 'center', fontSize: '.72rem', color: '#475569', marginTop: 4 }, children: "\u05DC\u05D0 \u05E0\u05D9\u05EA\u05DF \u05DC\u05D4\u05D6\u05DE\u05D9\u05DF \u05E0\u05E1\u05D9\u05E2\u05D4 \u05DC\u05DC\u05D0 \u05D0\u05D9\u05E9\u05D5\u05E8 \u05EA\u05E0\u05D0\u05D9 \u05D4\u05E9\u05D9\u05DE\u05D5\u05E9" })] })) })] })] }));
 }
 function Section({ title, children }) {
     return (_jsxs("div", { style: { marginBottom: 16 }, children: [_jsx("div", { style: { fontWeight: 700, color: '#F59E0B', marginBottom: 4, fontSize: '.85rem' }, children: title }), _jsx("div", { children: children })] }));
@@ -99,6 +94,7 @@ export default function RequestRide() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
     const [tosAccepted, setTosAccepted] = useState(() => localStorage.getItem(TOS_KEY) === '1');
+    // Modal always shows on load if not accepted, and whenever user tries to book
     const [showTos, setShowTos] = useState(() => localStorage.getItem(TOS_KEY) !== '1');
     function acceptTos() {
         localStorage.setItem(TOS_KEY, '1');
@@ -198,7 +194,7 @@ export default function RequestRide() {
             setBusy(false);
         }
     }
-    return (_jsxs("div", { style: { direction: 'rtl', display: 'flex', flexDirection: 'column', height: '100dvh', background: 'var(--bg-primary)', overflow: 'hidden' }, children: [showTos && (_jsx(TosModal, { onAccept: acceptTos, onClose: () => setShowTos(false) })), _jsxs("div", { style: {
+    return (_jsxs("div", { style: { direction: 'rtl', display: 'flex', flexDirection: 'column', height: '100dvh', background: 'var(--bg-primary)', overflow: 'hidden' }, children: [showTos && (_jsx(TosModal, { onAccept: acceptTos })), _jsxs("div", { style: {
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     padding: '.75rem 1rem', borderBottom: '1px solid var(--border)',
                     background: 'var(--bg-surface)', flexShrink: 0, zIndex: 10,
@@ -210,7 +206,7 @@ export default function RequestRide() {
                                     color: tosAccepted ? '#22C55E' : '#F59E0B',
                                     fontSize: '.68rem', fontWeight: 700, cursor: tosAccepted ? 'default' : 'pointer',
                                     transition: 'all .2s',
-                                }, children: [tosAccepted ? '✅' : '⚠️', _jsx("span", { style: { display: window.innerWidth > 360 ? 'inline' : 'none' }, children: tosAccepted ? 'תנאים אושרו' : 'ללא אישור' })] }), _jsx("button", { style: { fontSize: '.75rem', color: 'var(--text-secondary)', padding: '.25rem .5rem', border: '1px solid var(--border)', borderRadius: 6 }, onClick: () => navigate('/app/profile'), children: "\uD83D\uDC64" }), _jsx("button", { style: { fontSize: '.75rem', color: 'var(--text-secondary)', padding: '.25rem .5rem', border: '1px solid var(--border)', borderRadius: 6 }, onClick: () => { logout(); navigate('/login'); }, children: "\u05D9\u05E6\u05D9\u05D0\u05D4" })] })] }), _jsxs("div", { className: "map-fullscreen", style: { flex: '0 0 65vh', position: 'relative' }, children: [_jsx("div", { style: {
+                                }, children: [tosAccepted ? '✅' : '⚠️', _jsx("span", { style: { display: window.innerWidth > 360 ? 'inline' : 'none' }, children: tosAccepted ? 'תנאים אושרו' : 'ללא אישור' })] }), _jsx("button", { style: { fontSize: '.75rem', color: 'var(--text-secondary)', padding: '.25rem .5rem', border: '1px solid var(--border)', borderRadius: 6 }, onClick: () => navigate('/app/profile'), children: "\uD83D\uDC64" }), _jsx("button", { style: { fontSize: '.75rem', color: 'var(--text-secondary)', padding: '.25rem .5rem', border: '1px solid var(--border)', borderRadius: 6 }, onClick: () => { logout(); navigate('/login'); }, children: "\u05D9\u05E6\u05D9\u05D0\u05D4" })] })] }), _jsxs("div", { className: "map-fullscreen", style: { flex: '0 0 38vh', minHeight: 180, position: 'relative' }, children: [_jsx("div", { style: {
                             position: 'absolute', inset: 0,
                             background: `
             linear-gradient(rgba(255,215,0,.03) 1px, transparent 1px),
@@ -218,16 +214,23 @@ export default function RequestRide() {
             linear-gradient(180deg, #1a2a1a 0%, #1e2e1e 100%)
           `,
                             backgroundSize: '40px 40px, 40px 40px, 100% 100%',
-                        } }), _jsx("div", { style: {
-                            position: 'absolute', top: '38%', left: '50%',
+                        } }), _jsxs("div", { style: {
+                            position: 'absolute', top: '45%', left: '50%',
                             transform: 'translate(-50%, -50%)',
                             textAlign: 'center',
-                        }, children: _jsx("div", { style: { fontSize: '2.5rem', filter: 'drop-shadow(0 0 12px rgba(255,215,0,.6))' }, className: "taxi-bounce", children: "\uD83D\uDE95" }) }), _jsx("div", { style: {
+                        }, children: [[0, 0.5, 1].map(delay => (_jsx("div", { style: {
+                                    position: 'absolute', top: '50%', left: '50%',
+                                    transform: 'translate(-50%, -50%)',
+                                    width: 60, height: 60,
+                                    borderRadius: '50%',
+                                    border: '2px solid rgba(255,215,0,0.5)',
+                                    animation: `ripple 2s ease-out ${delay}s infinite`,
+                                } }, delay))), _jsx("div", { style: { position: 'relative', fontSize: '2.5rem', filter: 'drop-shadow(0 0 12px rgba(255,215,0,.6))' }, className: "taxi-bounce", children: "\uD83D\uDE95" })] }), _jsx("div", { style: {
                             position: 'absolute', bottom: '30%', left: '55%',
                             transform: 'translate(-50%, 0)',
                             fontSize: '1.75rem',
                             filter: 'drop-shadow(0 2px 8px rgba(0,0,0,.8))',
-                        }, children: "\uD83D\uDCCD" }), surge && (_jsx("div", { style: { position: 'absolute', top: '1rem', right: '1rem' }, children: _jsx(SurgeIndicator, { surge: surge }) })), locating && (_jsxs("div", { style: {
+                        }, children: "\uD83D\uDCCD" }), surge && !isNaN(parseFloat(surge.surge_multiplier)) && parseFloat(surge.surge_multiplier) > 1 && (_jsx("div", { style: { position: 'absolute', top: '1rem', right: '1rem' }, children: _jsx(SurgeIndicator, { surge: surge }) })), locating && (_jsxs("div", { style: {
                             position: 'absolute', bottom: '1rem', left: '50%', transform: 'translateX(-50%)',
                             background: 'rgba(26,26,26,.85)', color: 'var(--accent)',
                             padding: '.4rem .9rem', borderRadius: 20, fontSize: '.8rem', fontWeight: 600,
@@ -262,28 +265,21 @@ export default function RequestRide() {
                                         padding: '.65rem .85rem', cursor: 'pointer', fontSize: '.82rem',
                                         color: 'var(--text-primary)', borderBottom: '1px solid var(--border)',
                                         lineHeight: 1.4,
-                                    }, onMouseEnter: e => (e.currentTarget.style.background = 'rgba(255,215,0,.07)'), onMouseLeave: e => (e.currentTarget.style.background = 'transparent'), children: ["\uD83C\uDFC1 ", shortAddress(s.display_name)] }, s.place_id))) }))] }), fare && (_jsx("div", { className: "price-trust fade-in", style: { marginBottom: '.75rem' }, children: _jsxs("div", { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' }, children: [_jsxs("div", { children: [_jsx("div", { style: { fontSize: '.75rem', color: 'var(--text-secondary)', marginBottom: '.25rem' }, children: "\u05DE\u05D7\u05D9\u05E8 \u05E1\u05D5\u05E4\u05D9 \u2014 \u05DC\u05DC\u05D0 \u05D4\u05E4\u05EA\u05E2\u05D5\u05EA" }), _jsxs("div", { className: "price-trust-total", children: ["\u20AA", fare.total.toFixed(2)] })] }), _jsxs("div", { style: { textAlign: 'left', fontSize: '.8rem', color: 'var(--text-secondary)' }, children: [_jsxs("div", { children: [fare.distance_km.toFixed(1), " \u05E7\"\u05DE"] }), surge && parseFloat(surge.surge_multiplier) > 1 && (_jsxs("div", { style: { color: 'var(--accent)', fontWeight: 700 }, children: ["\u26A1 Surge \u00D7", surge.surge_multiplier] }))] })] }) })), error && (_jsx("div", { style: { color: 'var(--danger)', marginBottom: '.75rem', fontSize: '.875rem', padding: '.5rem .75rem', background: 'rgba(239,68,68,.1)', borderRadius: 8 }, children: error })), !tosAccepted && (_jsxs("div", { style: {
+                                    }, onMouseEnter: e => (e.currentTarget.style.background = 'rgba(255,215,0,.07)'), onMouseLeave: e => (e.currentTarget.style.background = 'transparent'), children: ["\uD83C\uDFC1 ", shortAddress(s.display_name)] }, s.place_id))) }))] }), fare && (_jsx("div", { className: "price-trust fade-in", style: { marginBottom: '.75rem' }, children: _jsxs("div", { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' }, children: [_jsxs("div", { children: [_jsx("div", { style: { fontSize: '.75rem', color: 'var(--text-secondary)', marginBottom: '.25rem' }, children: "\u05DE\u05D7\u05D9\u05E8 \u05E1\u05D5\u05E4\u05D9 \u2014 \u05DC\u05DC\u05D0 \u05D4\u05E4\u05EA\u05E2\u05D5\u05EA" }), _jsxs("div", { className: "price-trust-total", children: ["\u20AA", fare.total.toFixed(2)] })] }), _jsxs("div", { style: { textAlign: 'left', fontSize: '.8rem', color: 'var(--text-secondary)' }, children: [_jsxs("div", { children: [fare.distance_km.toFixed(1), " \u05E7\"\u05DE"] }), surge && parseFloat(surge.surge_multiplier) > 1 && (_jsxs("div", { style: { color: 'var(--accent)', fontWeight: 700 }, children: ["\u26A1 Surge \u00D7", surge.surge_multiplier] }))] })] }) })), error && (_jsx("div", { style: { color: 'var(--danger)', marginBottom: '.75rem', fontSize: '.875rem', padding: '.5rem .75rem', background: 'rgba(239,68,68,.1)', borderRadius: 8 }, children: error })), !tosAccepted && (_jsx("div", { style: {
                             marginBottom: '.85rem', padding: '14px 16px',
                             background: 'linear-gradient(135deg,rgba(245,158,11,.12),rgba(245,158,11,.06))',
                             border: '1.5px solid rgba(245,158,11,.35)',
                             borderRadius: 14,
                             direction: 'rtl',
-                        }, children: [_jsxs("div", { style: { display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }, children: [_jsx("span", { style: { fontSize: '1.25rem', flexShrink: 0, marginTop: 1 }, children: "\u26A0\uFE0F" }), _jsxs("div", { children: [_jsx("div", { style: { fontWeight: 800, color: '#F59E0B', fontSize: '.9rem', marginBottom: 3 }, children: "You must accept the Terms of Service before requesting a ride" }), _jsx("div", { style: { fontSize: '.78rem', color: '#94A3B8', lineHeight: 1.5 }, children: "\u05E0\u05D3\u05E8\u05E9\u05EA \u05D4\u05E1\u05DB\u05DE\u05D4 \u05DC\u05EA\u05E0\u05D0\u05D9 \u05D4\u05E9\u05D9\u05DE\u05D5\u05E9 \u05DC\u05E4\u05E0\u05D9 \u05D4\u05D6\u05DE\u05E0\u05EA \u05E0\u05E1\u05D9\u05E2\u05D4. \u05E7\u05E8\u05D0 \u05D5\u05D0\u05E9\u05E8 \u05DB\u05D3\u05D9 \u05DC\u05D1\u05D8\u05DC \u05E0\u05E2\u05D9\u05DC\u05D4 \u05D6\u05D5." })] })] }), _jsx("button", { onClick: () => setShowTos(true), style: {
-                                    width: '100%', padding: '11px',
-                                    background: 'linear-gradient(135deg,#F59E0B,#D97706)',
-                                    border: 'none', borderRadius: 11,
-                                    color: '#0F172A', fontWeight: 800, fontSize: '.9rem',
-                                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                                    boxShadow: '0 4px 14px rgba(245,158,11,.35)',
-                                    transition: 'transform .15s, box-shadow .15s',
-                                }, onMouseEnter: e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(245,158,11,.5)'; }, onMouseLeave: e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(245,158,11,.35)'; }, children: "\uD83D\uDCCB \u05E7\u05E8\u05D0 \u05D5\u05D4\u05E1\u05DB\u05DD \u05DC\u05EA\u05E0\u05D0\u05D9 \u05D4\u05E9\u05D9\u05DE\u05D5\u05E9" })] })), _jsx("button", { className: "btn btn-primary", style: {
+                        }, children: _jsxs("label", { style: { display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }, children: [_jsx("input", { type: "checkbox", onChange: e => { if (e.target.checked)
+                                        acceptTos(); }, style: { marginTop: 3, width: 18, height: 18, accentColor: '#F59E0B', flexShrink: 0 } }), _jsxs("div", { children: [_jsx("div", { style: { fontWeight: 700, color: '#F59E0B', fontSize: '.88rem', marginBottom: 2 }, children: "\u05E7\u05E8\u05D0\u05EA\u05D9 \u05D5\u05DE\u05E1\u05DB\u05D9\u05DD \u05DC\u05EA\u05E0\u05D0\u05D9 \u05D4\u05E9\u05D9\u05DE\u05D5\u05E9" }), _jsxs("div", { style: { fontSize: '.75rem', color: '#94A3B8', lineHeight: 1.5 }, children: ["\u05E0\u05D3\u05E8\u05E9\u05EA \u05D4\u05E1\u05DB\u05DE\u05D4 \u05DC\u05E4\u05E0\u05D9 \u05D4\u05D6\u05DE\u05E0\u05EA \u05E0\u05E1\u05D9\u05E2\u05D4.", ' ', _jsx("span", { style: { textDecoration: 'underline', cursor: 'pointer' }, onClick: e => { e.preventDefault(); setShowTos(true); }, children: "\u05E7\u05E8\u05D0 \u05D0\u05EA \u05D4\u05EA\u05E0\u05D0\u05D9\u05DD" })] })] })] }) })), _jsx("button", { className: "btn btn-primary", style: {
                             width: '100%', padding: '1rem', fontSize: '1.1rem', fontWeight: 800,
                             borderRadius: 'var(--radius-lg)',
                             opacity: tosAccepted ? 1 : 0.35,
                             cursor: tosAccepted ? 'pointer' : 'not-allowed',
                             filter: tosAccepted ? 'none' : 'grayscale(0.4)',
                             transition: 'opacity .3s, filter .3s',
-                        }, disabled: busy || !tosAccepted, onClick: tosAccepted ? requestRide : () => setShowTos(true), children: busy
+                        }, disabled: busy, onClick: tosAccepted ? requestRide : () => setShowTos(true), children: busy
                             ? _jsxs(_Fragment, { children: [_jsx("span", { className: "spinner", style: { width: 18, height: 18, border: '2px solid #1A1A1A', borderTopColor: 'transparent', marginLeft: '.5rem' } }), "\u05DE\u05D7\u05E4\u05E9 \u05E0\u05D4\u05D2\u2026"] })
                             : tosAccepted ? '🚕 הזמן נסיעה עכשיו' : '🔒 נדרש אישור תנאי שימוש' }), _jsx("div", { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '.5rem', marginTop: '.75rem' }, children: [
                             { icon: '🚕', label: 'מונית', sublabel: 'מורשה' },

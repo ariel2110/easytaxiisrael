@@ -87,58 +87,8 @@ export default function DriverPending() {
   const navigate = useNavigate()
   const [elapsed, setElapsed] = useState(0)
   const [kycStatus, setKycStatus] = useState<KycStatus>('created')
-  const [kycUrl, setKycUrl] = useState<string | null>(() => localStorage.getItem('kyc_url'))
   const [approved, setApproved] = useState(false)
-  const [kycLoading, setKycLoading] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  function handleStartKyc() {
-    if (!kycUrl || kycLoading) return
-
-    let inquiryId: string | null = null
-    let sessionToken: string | null = null
-    try {
-      const parsed = new URL(kycUrl)
-      inquiryId = parsed.searchParams.get('inquiry-id')
-      sessionToken = parsed.searchParams.get('session-token')
-    } catch { /* ignore */ }
-
-    if (!inquiryId) { window.location.href = kycUrl; return }
-
-    setKycLoading(true)
-    const iid = inquiryId
-    const stok = sessionToken
-
-    function openClient() {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const P = (window as any).Persona
-      if (!P?.Client) { setKycLoading(false); window.location.href = kycUrl!; return }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const cfg: Record<string, any> = {
-        inquiryId: iid,
-        onReady: () => { setKycLoading(false); client.open() },
-        onComplete: () => { window.location.reload() },
-        onCancel: () => { setKycLoading(false) },
-        onError: () => { setKycLoading(false); window.location.href = kycUrl! },
-      }
-      if (stok) cfg.sessionToken = stok
-      const client = new P.Client(cfg)
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((window as any).Persona?.Client) { openClient(); return }
-
-    if (document.getElementById('persona-sdk')) {
-      document.getElementById('persona-sdk')!.addEventListener('load', openClient, { once: true })
-      return
-    }
-    const s = document.createElement('script')
-    s.id = 'persona-sdk'
-    s.src = 'https://cdn.withpersona.com/dist/persona-v5-latest.js'
-    s.addEventListener('load', openClient, { once: true })
-    s.addEventListener('error', () => { setKycLoading(false); window.location.href = kycUrl! }, { once: true })
-    document.head.appendChild(s)
-  }
 
   useEffect(() => {
     const el = document.createElement('style')
@@ -161,7 +111,6 @@ export default function DriverPending() {
         if (!r.ok) return
         const data = await r.json()
         setKycStatus(data.kyc_status as KycStatus)
-        if (data.kyc_url) setKycUrl(data.kyc_url)
         if (data.kyc_status === 'approved') {
           setApproved(true)
           if (pollRef.current) clearInterval(pollRef.current)
@@ -179,17 +128,7 @@ export default function DriverPending() {
 
   return (
     <div className="dp">
-      {/* ── Persona SDK loading overlay ── */}
-      {kycLoading && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(7,11,20,0.96)',
-        }}>
-          <div style={{ width: 48, height: 48, border: '4px solid rgba(255,255,255,.1)', borderTopColor: '#7C3AED', borderRadius: '50%', animation: 'dpSpin 1s linear infinite' }} />
-          <p style={{ marginTop: 20, color: '#94A3B8', fontFamily: 'Heebo,sans-serif', fontSize: '0.95rem' }}>טוען אימות זהות…</p>
-        </div>
-      )}
+      {/* ── Sumsub SDK loading overlay removed ── */}
       <div className="dp-bg" />
       <div className="dp-wrap">
 
@@ -216,7 +155,7 @@ export default function DriverPending() {
             <>
           <div className="dp-title">אימות <span>בתהליך</span></div>
           <div className="dp-sub">
-            קיבלנו את המסמכים שלך. Persona KYC מאמתת את הזהות שלך כעת.
+            קיבלנו את המסמכים שלך. Sumsub KYC מאמתת את הזהות שלך כעת.
             תקבל הודעה בוואטסאפ ברגע שתהיה מוכן לנסוע.
           </div>
 
@@ -237,18 +176,17 @@ export default function DriverPending() {
             ))}
           </div>
 
-          {kycUrl && (kycStatus === 'not_started' || kycStatus === 'created') && (
+          {(kycStatus === 'not_started' || kycStatus === 'created') && (
             <button
               className="dp-wa"
               style={{ background: '#7C3AED', boxShadow: '0 4px 18px rgba(124,58,237,.4)', marginBottom: '12px' }}
-              onClick={handleStartKyc}
-              disabled={kycLoading}
+              onClick={() => navigate('/verify')}
             >
-              🪪 {kycLoading ? 'טוען…' : 'השלם אימות Persona'}
+              🪪 התחל אימות Sumsub
             </button>
           )}
 
-          <div className="dp-persona">🛡️ מופעל על ידי Persona · ISO 27001 · SOC 2</div>
+          <div className="dp-persona">🛡️ מופעל על ידי Sumsub · ISO 27001 · SOC 2</div>
             </>
           )}
         </div>

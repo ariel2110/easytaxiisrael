@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { api } from '../services/api'
-import type { AIAgent } from '../types'
+import type { AIAgent, AIChatHistory } from '../types'
 
 interface Message { role: 'user' | 'assistant'; content: string; model?: string }
 
@@ -15,6 +15,9 @@ export default function AIAgents() {
   const [editKey, setEditKey] = useState<{ id: string; value: string } | null>(null)
   const [savingKey, setSavingKey] = useState(false)
   const [keyMsg, setKeyMsg] = useState('')
+  const [tab, setTab] = useState<'chat' | 'history'>('chat')
+  const [history, setHistory] = useState<AIChatHistory[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
   const chatRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { load() }, [])
@@ -37,6 +40,22 @@ export default function AIAgents() {
     setMessages([])
     setInput('')
     setEditKey(null)
+    setTab('chat')
+    setHistory([])
+  }
+
+  async function loadHistory(agentId: string) {
+    setHistoryLoading(true)
+    try {
+      const data = await api.aiAgents.history(agentId)
+      setHistory(data)
+    } catch { setHistory([]) }
+    setHistoryLoading(false)
+  }
+
+  function switchTab(t: 'chat' | 'history') {
+    setTab(t)
+    if (t === 'history' && selected) loadHistory(selected.id)
   }
 
   async function sendMessage() {
@@ -216,77 +235,127 @@ export default function AIAgents() {
               flex: 1, background: 'var(--surface)', border: '1px solid var(--border)',
               borderRadius: '12px', display: 'flex', flexDirection: 'column', overflow: 'hidden',
             }}>
-              {/* Messages */}
-              <div
-                ref={chatRef}
-                style={{ flex: 1, overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
-              >
-                {messages.length === 0 && (
-                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', textAlign: 'center', marginTop: '2rem' }}>
-                    {selected.enabled ? `שלח הודעה ל-${selected.name}` : `⚠️ נדרש API key כדי לשוחח עם ${selected.name}`}
-                  </div>
-                )}
-                {messages.map((msg, i) => (
-                  <div key={i} style={{
-                    alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                    maxWidth: '75%',
-                  }}>
-                    <div style={{
-                      background: msg.role === 'user' ? 'var(--accent)' : 'var(--background)',
-                      color: msg.role === 'user' ? '#000' : 'inherit',
-                      border: msg.role === 'assistant' ? '1px solid var(--border)' : 'none',
-                      borderRadius: '12px', padding: '0.65rem 0.9rem',
-                      fontSize: '0.875rem', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                    }}>
-                      {msg.content}
-                    </div>
-                    {msg.model && (
-                      <div style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', marginTop: '0.2rem', padding: '0 0.25rem' }}>
-                        {msg.model}
+              {/* Tabs */}
+              <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
+                {(['chat', 'history'] as const).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => switchTab(t)}
+                    style={{
+                      padding: '0.65rem 1.25rem', fontSize: '0.82rem', fontWeight: 600,
+                      background: 'transparent', border: 'none', cursor: 'pointer',
+                      color: tab === t ? 'var(--accent)' : 'var(--text-secondary)',
+                      borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent',
+                    }}
+                  >
+                    {t === 'chat' ? '💬 שיחה' : '🕐 היסטוריה'}
+                  </button>
+                ))}
+              </div>
+
+              {tab === 'chat' ? (
+                <>
+                  {/* Messages */}
+                  <div
+                    ref={chatRef}
+                    style={{ flex: 1, overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
+                  >
+                    {messages.length === 0 && (
+                      <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', textAlign: 'center', marginTop: '2rem' }}>
+                        {selected.enabled ? `שלח הודעה ל-${selected.name}` : `⚠️ נדרש API key כדי לשוחח עם ${selected.name}`}
+                      </div>
+                    )}
+                    {messages.map((msg, i) => (
+                      <div key={i} style={{ alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '75%' }}>
+                        <div style={{
+                          background: msg.role === 'user' ? 'var(--accent)' : 'var(--background)',
+                          color: msg.role === 'user' ? '#000' : 'inherit',
+                          border: msg.role === 'assistant' ? '1px solid var(--border)' : 'none',
+                          borderRadius: '12px', padding: '0.65rem 0.9rem',
+                          fontSize: '0.875rem', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                        }}>
+                          {msg.content}
+                        </div>
+                        {msg.model && (
+                          <div style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', marginTop: '0.2rem', padding: '0 0.25rem' }}>
+                            {msg.model}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {sending && (
+                      <div style={{ alignSelf: 'flex-start' }}>
+                        <div style={{
+                          background: 'var(--background)', border: '1px solid var(--border)',
+                          borderRadius: '12px', padding: '0.65rem 0.9rem', fontSize: '0.875rem',
+                          color: 'var(--text-secondary)',
+                        }}>
+                          מחשב...
+                        </div>
                       </div>
                     )}
                   </div>
-                ))}
-                {sending && (
-                  <div style={{ alignSelf: 'flex-start' }}>
-                    <div style={{
-                      background: 'var(--background)', border: '1px solid var(--border)',
-                      borderRadius: '12px', padding: '0.65rem 0.9rem', fontSize: '0.875rem',
-                      color: 'var(--text-secondary)',
-                    }}>
-                      מחשב...
-                    </div>
-                  </div>
-                )}
-              </div>
 
-              {/* Input */}
-              <div style={{
-                padding: '0.75rem 1rem', borderTop: '1px solid var(--border)',
-                display: 'flex', gap: '0.5rem', alignItems: 'flex-end',
-              }}>
-                <textarea
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
-                  placeholder={selected.enabled ? 'כתוב הודעה... (Enter לשלוח)' : 'נדרש API key'}
-                  disabled={!selected.enabled || sending}
-                  rows={2}
-                  style={{
-                    flex: 1, background: 'var(--background)', border: '1px solid var(--border)',
-                    borderRadius: '8px', padding: '0.5rem 0.75rem', color: 'inherit',
-                    fontSize: '0.875rem', resize: 'none', lineHeight: 1.4,
-                  }}
-                />
-                <button
-                  className="btn btn-primary"
-                  onClick={sendMessage}
-                  disabled={!selected.enabled || !input.trim() || sending}
-                  style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', flexShrink: 0 }}
-                >
-                  שלח
-                </button>
-              </div>
+                  {/* Input */}
+                  <div style={{
+                    padding: '0.75rem 1rem', borderTop: '1px solid var(--border)',
+                    display: 'flex', gap: '0.5rem', alignItems: 'flex-end',
+                  }}>
+                    <textarea
+                      value={input}
+                      onChange={e => setInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
+                      placeholder={selected.enabled ? 'כתוב הודעה... (Enter לשלוח)' : 'נדרש API key'}
+                      disabled={!selected.enabled || sending}
+                      rows={2}
+                      style={{
+                        flex: 1, background: 'var(--background)', border: '1px solid var(--border)',
+                        borderRadius: '8px', padding: '0.5rem 0.75rem', color: 'inherit',
+                        fontSize: '0.875rem', resize: 'none', lineHeight: 1.4,
+                      }}
+                    />
+                    <button
+                      className="btn btn-primary"
+                      onClick={sendMessage}
+                      disabled={!selected.enabled || !input.trim() || sending}
+                      style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', flexShrink: 0 }}
+                    >
+                      שלח
+                    </button>
+                  </div>
+                </>
+              ) : (
+                /* History tab */
+                <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {historyLoading ? (
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', textAlign: 'center', marginTop: '2rem' }}>טוען...</div>
+                  ) : history.length === 0 ? (
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', textAlign: 'center', marginTop: '2rem' }}>אין היסטוריה עדיין</div>
+                  ) : history.map(entry => (
+                    <div key={entry.id} style={{
+                      background: 'var(--background)', border: '1px solid var(--border)',
+                      borderRadius: '10px', padding: '0.85rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                          {new Date(entry.timestamp).toLocaleString('he-IL')}
+                        </span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', background: 'var(--surface)', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>
+                          {entry.model}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.82rem' }}>
+                        <span style={{ color: 'var(--accent)', fontWeight: 600 }}>שאלה: </span>
+                        <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{entry.message}</span>
+                      </div>
+                      <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                        <span style={{ fontWeight: 600 }}>תשובה: </span>
+                        <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{entry.reply}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </>
         )}

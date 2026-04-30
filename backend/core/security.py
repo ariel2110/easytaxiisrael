@@ -20,19 +20,23 @@ WA_AUTH_TTL_SECONDS = 900    # 15 minutes for WhatsApp auth sessions
 
 def normalize_phone(phone: str) -> str:
     """
-    Normalise any Israeli phone format to E.164 without the leading '+'.
+    Normalise phone to E.164 without the leading '+'.
+    Israeli local format (starts with 0) gets 972 prefix.
+    Numbers that already have a country code are kept as-is.
     Accepted inputs:
       0546363350        → 972546363350
       972546363350      → 972546363350
       +972546363350     → 972546363350
       +972 54-636-3350  → 972546363350
-    Returns digits-only string starting with country code (972…).
+      447474775344      → 447474775344  (UK, kept as-is)
+      +447474775344     → 447474775344  (UK, kept as-is)
+    Returns digits-only string starting with country code.
     """
     digits = re.sub(r"\D", "", phone)
     if digits.startswith("0"):
+        # Israeli local format — replace leading 0 with 972
         digits = "972" + digits[1:]
-    if not digits.startswith("972"):
-        digits = "972" + digits
+    # else: assume number already includes country code (972xx or 44xx etc.)
     return digits
 
 

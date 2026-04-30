@@ -169,17 +169,17 @@ const CSS = `
 `
 
 export default function Login() {
-  const { requestOtp, verifyOtp, cancelOtp, otpPhone, error, user, loading } = useAuth()
+  const { requestWaAuth, cancelWaAuth, waSession, error, user, loading } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [phone, setPhone] = useState('')
-  const [otp, setOtp] = useState('')
   const [busy, setBusy] = useState(false)
   const [localErr, setLocalErr] = useState<string | null>(null)
   const [selectedRole, setSelectedRole] = useState<string | null>(() => {
     const urlRole = new URLSearchParams(window.location.search).get('role')
     return (urlRole === 'passenger' || urlRole === 'driver' || urlRole === 'taxi') ? urlRole : null
   })
+  const [waOpened, setWaOpened] = useState(false)
 
   useEffect(() => {
     const el = document.createElement('style')
@@ -191,10 +191,8 @@ export default function Login() {
 
   useEffect(() => {
     if (!loading && user) {
-      // Use server-confirmed role (stored during poll completion) for accurate routing
       const confirmedRole = localStorage.getItem('auth_role') || selectedRole || 'passenger'
       if (confirmedRole === 'driver' || confirmedRole === 'taxi') {
-        // Go directly to pending — no need to ask phone/name again
         navigate('/driver', { replace: true })
       } else {
         navigate('/app', { replace: true })
@@ -202,11 +200,11 @@ export default function Login() {
     }
   }, [user, loading, navigate, selectedRole])
 
-  async function handleSendOtp() {
+  async function handleWaAuth() {
     if (!phone.trim()) return
     setBusy(true); setLocalErr(null)
     try {
-      await requestOtp(phone.trim())
+      await requestWaAuth(phone.trim(), selectedRole ?? 'passenger')
     } catch (e) {
       setLocalErr((e as Error).message)
     } finally {
@@ -214,16 +212,10 @@ export default function Login() {
     }
   }
 
-  async function handleVerifyOtp() {
-    if (otp.length !== 6) return
-    setBusy(true); setLocalErr(null)
-    try {
-      await verifyOtp(otp, selectedRole ?? 'passenger')
-    } catch (e) {
-      setLocalErr((e as Error).message)
-      setOtp('')
-    } finally {
-      setBusy(false)
+  function handleOpenWhatsApp() {
+    if (waSession?.whatsapp_link) {
+      window.open(waSession.whatsapp_link, '_blank', 'noopener,noreferrer')
+      setWaOpened(true)
     }
   }
 
@@ -251,8 +243,8 @@ export default function Login() {
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '26px' }}>
           <div className="lg-steps">
             {!searchParams.get('role') && <div className={`lg-s ${selectedRole === null ? 'on' : ''}`} />}
-            <div className={`lg-s ${selectedRole !== null && !otpPhone ? 'on' : ''}`} />
-            <div className={`lg-s ${otpPhone ? 'on' : ''}`} />
+            <div className={`lg-s ${selectedRole !== null && !waSession ? 'on' : ''}`} />
+            <div className={`lg-s ${waSession ? 'on' : ''}`} />
           </div>
         </div>
 
@@ -289,8 +281,8 @@ export default function Login() {
             </div>
             <div className="lg-role-hint">לא בטוח? <a href="/guest" style={{ color: 'var(--bluel)', fontWeight: 700 }}>ראה מידע →</a></div>
           </div>
-        ) : !otpPhone ? (
-          /* ── Step 1: phone entry ── */
+        ) : !waSession ? (
+          /* ── Step 1: phone entry → WA auth ── */
           <div>
             <label className="lg-lbl">מספר טלפון (וואטסאפ)</label>
             <input
@@ -299,21 +291,21 @@ export default function Login() {
               placeholder="05X-XXX-XXXX"
               value={phone}
               onChange={e => setPhone(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSendOtp()}
+              onKeyDown={e => e.key === 'Enter' && handleWaAuth()}
               autoFocus
             />
             <button
               className="lg-cta"
               disabled={busy || !phone.trim()}
-              onClick={handleSendOtp}
+              onClick={handleWaAuth}
             >
               {busy
-                ? <><span className="lg-spin" /> שולח…</>
-                : <><span style={{ fontSize: '1.1rem' }}>💬</span> שלח קוד אימות בוואטסאפ</>}
+                ? <><span className="lg-spin" /> יוצר קישור…</>
+                : <><span style={{ fontSize: '1.1rem' }}>💬</span> כניסה דרך וואטסאפ</>}
             </button>
             <p className="lg-hint">
-              נשלח אליך קוד 6 ספרות בהודעת וואטסאפ.<br />
-              הכנס אותו בשלב הבא — בלי סיסמא, בלי קישורים.
+              נשלח לך קישור לוואטסאפ — לחץ עליו ושלח את ההודעה.<br />
+              לא צריך קוד, לא צריך סיסמא. בלחיצה אחת.
             </p>
 
             <div className="lg-div" />
@@ -324,35 +316,45 @@ export default function Login() {
             </div>
           </div>
         ) : (
-          /* ── Step 2: enter OTP received on WhatsApp ── */
+          /* ── Step 2: WA pending — open WA + auto-poll ── */
           <div className="lg-wa-step">
-            <div className="lg-wa-icon">📩</div>
-            <div className="lg-wa-title">הזן את הקוד מהוואטסאפ</div>
-            <div className="lg-wa-sub">
-              שלחנו קוד 6 ספרות לוואטסאפ של {otpPhone}<br />
-              הוא בתוקף ל-5 דקות
+            <div className="lg-wa-icon">{waOpened ? '⏳' : '💬'}</div>
+            <div className="lg-wa-title">
+              {waOpened ? 'ממתין לאימות…' : 'פתח וואטסאפ ושלח הודעה'}
             </div>
-            <input
-              className="lg-otp"
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={6}
-              placeholder="000000"
-              value={otp}
-              onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              onKeyDown={e => e.key === 'Enter' && handleVerifyOtp()}
-              autoFocus
-            />
+            <div className="lg-wa-sub">
+              {waOpened
+                ? 'שלחת את ההודעה? הכניסה תתבצע אוטומטית תוך שניות — לא צריך לעשות כלום.'
+                : 'לחץ על הכפתור למטה. וואטסאפ ייפתח עם הודעה מוכנה — פשוט לחץ "שלח".'}
+            </div>
+
+            {!waOpened ? (
+              <button className="lg-wa-btn" onClick={handleOpenWhatsApp} style={{ display: 'inline-flex', width: '100%', justifyContent: 'center' }}>
+                <span style={{ fontSize: '1.2rem' }}>💬</span>
+                פתח וואטסאפ לאימות
+              </button>
+            ) : (
+              <div className="lg-poll">
+                <span className="lg-spin" />
+                מחכה לאישורך…
+              </div>
+            )}
+
+            {waOpened && (
+              <button
+                className="lg-wa-btn"
+                onClick={handleOpenWhatsApp}
+                style={{ display: 'inline-flex', width: '100%', justifyContent: 'center', marginTop: 14, fontSize: '.88rem', padding: '11px 20px', background: 'rgba(37,211,102,.12)', color: '#25D366', boxShadow: 'none', border: '1px solid rgba(37,211,102,.3)' }}
+              >
+                לא נפתח? לחץ שוב
+              </button>
+            )}
+
             <button
-              className="lg-cta"
-              style={{ marginTop: '16px' }}
-              disabled={busy || otp.length !== 6}
-              onClick={handleVerifyOtp}
+              className="lg-ghost"
+              style={{ marginTop: 16 }}
+              onClick={() => { cancelWaAuth(); setWaOpened(false); setPhone('') }}
             >
-              {busy ? <><span className="lg-spin" /> מאמת…</> : <>✅ כניסה</>}
-            </button>
-            <button className="lg-ghost" onClick={() => { cancelOtp(); setOtp('') }}>
               ← חזור ונסה שוב
             </button>
           </div>

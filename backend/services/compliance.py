@@ -61,8 +61,8 @@ from schemas.compliance import (
 # ---------------------------------------------------------------------------
 
 # Required documents every driver must have
+# Note: drivers_license is verified via Sumsub identity check — not required here
 REQUIRED_DOCUMENTS: list[DocumentType] = [
-    DocumentType.drivers_license,
     DocumentType.vehicle_registration,
     DocumentType.vehicle_insurance,
     DocumentType.background_check,
@@ -71,11 +71,11 @@ REQUIRED_DOCUMENTS: list[DocumentType] = [
 
 # Relative importance of each document type (must sum to 100 for readability)
 _DOCUMENT_WEIGHTS: dict[DocumentType, float] = {
-    DocumentType.drivers_license:      25.0,
-    DocumentType.vehicle_registration: 20.0,
-    DocumentType.vehicle_insurance:    25.0,
-    DocumentType.background_check:     20.0,
-    DocumentType.vehicle_inspection:   10.0,
+    DocumentType.drivers_license:       0.0,   # verified via Sumsub — not scored
+    DocumentType.vehicle_registration: 30.0,
+    DocumentType.vehicle_insurance:    30.0,
+    DocumentType.background_check:     25.0,
+    DocumentType.vehicle_inspection:   15.0,
     DocumentType.profile_photo:         0.0,   # not scored, but tracked
 }
 

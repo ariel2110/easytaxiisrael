@@ -7,14 +7,18 @@ from __future__ import annotations
 
 import os
 import re
+import json
+import uuid
 import httpx
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from core.config import settings
-from core.dependencies import require_roles
+from core.dependencies import require_admin_key
+from core.redis import get_redis
 from models.user import User, UserRole
 
 router = APIRouter(prefix="/admin/ai-agents", tags=["admin", "ai-agents"])
@@ -120,6 +124,14 @@ class ChatResponse(BaseModel):
     reply: str
 
 
+class ChatHistoryEntry(BaseModel):
+    id: str
+    timestamp: str
+    message: str
+    reply: str
+    model: str
+
+
 class UpdateKeyRequest(BaseModel):
     api_key: str
 
@@ -179,7 +191,7 @@ async def _chat_gemini(api_key: str, model: str, message: str) -> str:
 
 @router.get("", response_model=list[AgentSummary], summary="List all AI agents")
 async def list_agents(
-    _: User = Depends(require_roles(UserRole.admin)),
+    _: User = Depends(require_admin_key),
 ) -> list[AgentSummary]:
     result = []
     for ag in AGENT_DEFS:
@@ -200,7 +212,7 @@ async def list_agents(
 async def chat_with_agent(
     agent_id: str,
     body: ChatRequest,
-    _: User = Depends(require_roles(UserRole.admin)),
+    _: User = Depends(require_admin_key),
 ) -> ChatResponse:
     ag = next((a for a in AGENT_DEFS if a["id"] == agent_id), None)
     if not ag:
@@ -220,14 +232,47 @@ async def chat_with_agent(
     else:  # openai or openai_compat
         reply = await _chat_openai_compat(ag["base_url"], key, model, body.message)
 
+    # Save to Redis history (keep last 100 per agent)
+    try:
+        redis = await get_redis()
+        entry = {
+            "id": str(uuid.uuid4()),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "message": body.message,
+            "reply": reply,
+            "model": model,
+        }
+        redis_key = f"agent_history:{agent_id}"
+        await redis.lpush(redis_key, json.dumps(entry))
+        await redis.ltrim(redis_key, 0, 99)  # keep last 100
+    except Exception:
+        pass  # don't fail the request if Redis is down
+
     return ChatResponse(agent_id=agent_id, model=model, reply=reply)
+
+
+@router.get("/{agent_id}/history", response_model=list[ChatHistoryEntry], summary="Get chat history for an agent")
+async def get_agent_history(
+    agent_id: str,
+    limit: int = 50,
+    _: User = Depends(require_admin_key),
+) -> list[ChatHistoryEntry]:
+    ag = next((a for a in AGENT_DEFS if a["id"] == agent_id), None)
+    if not ag:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    try:
+        redis = await get_redis()
+        raw = await redis.lrange(f"agent_history:{agent_id}", 0, limit - 1)
+        return [ChatHistoryEntry(**json.loads(r)) for r in raw]
+    except Exception:
+        return []
 
 
 @router.put("/{agent_id}/key", response_model=UpdateKeyResponse, summary="Update API key for an agent")
 async def update_agent_key(
     agent_id: str,
     body: UpdateKeyRequest,
-    _: User = Depends(require_roles(UserRole.admin)),
+    _: User = Depends(require_admin_key),
 ) -> UpdateKeyResponse:
     ag = next((a for a in AGENT_DEFS if a["id"] == agent_id), None)
     if not ag:
@@ -273,7 +318,7 @@ async def update_agent_key(
 @router.delete("/{agent_id}/key", status_code=204, summary="Disable an AI agent (clear key)")
 async def disable_agent(
     agent_id: str,
-    _: User = Depends(require_roles(UserRole.admin)),
+    _: User = Depends(require_admin_key),
 ) -> None:
     ag = next((a for a in AGENT_DEFS if a["id"] == agent_id), None)
     if not ag:

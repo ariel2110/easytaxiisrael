@@ -1,5 +1,80 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+const FEATURES = [
+    {
+        ico: '🤖',
+        t: 'AI מוצא נהג טוב יותר',
+        d: 'אלגוריתם חכם מתאים נהג לפי מיקום, דירוג ומהירות תגובה — תוך שניות.',
+        detail: {
+            sub: 'לא מדובר בגורל מזל — המערכת מחשבת בשבילך מי הנהג הכי טוב לאותה נסיעה ספציפית, תוך שניות.',
+            steps: [
+                { title: 'מיקום בזמן אמת', desc: 'המערכת רואה את המיקום של כל הנהגים הפנויים ומחשבת מי הכי קרוב אליך — לא לפי מפה ישנה, אלא GPS חי.' },
+                { title: 'דירוג הנהג', desc: 'נהגים עם דירוג גבוה מקבלים עדיפות. נהג עם 4.8⭐ יקבל את הנסיעה לפני נהג עם 3.9⭐ גם אם הוא קצת יותר רחוק.' },
+                { title: 'מהירות תגובה', desc: 'הוסף לחשבון: האם הנהג לוחץ "קבל נסיעה" מהר? נהגים שמגיבים תוך 10 שניות מוגדרים "פעיל" ומקבלים בונוס קידום.' },
+                { title: 'ניסיון בנסיעות דומות', desc: 'נסיעה ארוכה? הAI יעדיף נהג שבוצע ממנו נסיעות ארוכות בעבר ועמד בזמן.' },
+            ],
+            tags: [
+                { label: '⚡ ממוצע 47 שניות לנהג', cls: 'b' },
+                { label: '✅ 98.3% שביעות רצון', cls: 'g' },
+            ],
+        },
+    },
+    {
+        ico: '💰',
+        t: 'מחיר שקוף בזמן אמת',
+        d: 'אתה יודע כמה תשלם לפני שאתה עולה לרכב. לא עוד הפתעות בסוף הנסיעה.',
+        detail: {
+            sub: 'בדרך כלל אתה יודע כמה נסיעה עולה רק אחרי שיצאת מהרכב. אצלנו אתה מאשר מחיר סופי לפני שאתה עולה.',
+            steps: [
+                { title: 'מחיר מחושב מראש', desc: 'מיד לאחר הכנסת כתובת יעד — המערכת מחשבת: מרחק × תעריף + בסיס. המחיר נעול. לא "ממוצע" — מחיר מדויק.' },
+                { title: 'אין תוספות נסתרות', desc: 'לא משנה אם הנסיעה ארוכה יותר בגלל פקק, לא יחויב יותר. המחיר שאישרת = המחיר שמשלמים.' },
+                { title: 'חשבונית אוטומטית', desc: 'בסיום הנסיעה נשלחת חשבונית דיגיטלית מלאה ל-WhatsApp שלך — עם תאריך, מסלול ופירוט מחיר.' },
+                { title: 'השוואה קלה', desc: 'ניתן לראות מחיר לפני לחיצה "אשר נסיעה". אם יקר לך — פשוט לא מאשרים. ללא לחץ.' },
+            ],
+            tags: [
+                { label: '🔒 מחיר קבוע לפני נסיעה', cls: 'g' },
+                { label: '🧾 חשבונית לכל נסיעה', cls: 'b' },
+            ],
+        },
+    },
+    {
+        ico: '⚖️',
+        t: 'מערכת חוקית מלאה',
+        d: 'כל נהג מאומת — רישיון בתוקף, ביטוח ובדיקת גיל רכב. אנחנו מטפלים בהכל.',
+        detail: {
+            sub: 'כל נהג שנרשם לפלטפורמה עובר סדרת בדיקות אוטומטיות מול מסדי נתונים ממשלתיים — לפני שהוא מקבל נסיעה אחת.',
+            steps: [
+                { title: 'אימות זהות (Persona KYC)', desc: 'צילום תעודת זהות + סרטון סלפי — מוודאים שהנהג הוא מי שהוא אומר שהוא. כל הנתונים מוצפנים.' },
+                { title: 'בדיקת רישיון נהיגה', desc: 'המערכת בודקת מול משרד התחבורה אוטומטית שהרישיון בתוקף ולא מוגבל.' },
+                { title: 'בדיקת רכב ממשלתית', desc: 'מספר לוחית הרישוי נבדק אוטומטית מול data.gov.il — גיל רכב, טסט, ביטוח חובה בתוקף.' },
+                { title: 'ביטוח נסיעות שיתוף', desc: 'כל נסיעה מכוסה בביטוח מיוחד. לא ביטוח פרטי רגיל — ביטוח שמכסה נוסעים בתשלום. כיסוי עד 3 מיליון ₪.' },
+            ],
+            tags: [
+                { label: '🏛️ מחובר ל-data.gov.il', cls: 'b' },
+                { label: '🔐 SOC 2 KYC', cls: 'g' },
+                { label: '3M ₪ ביטוח', cls: 'y' },
+            ],
+        },
+    },
+    {
+        ico: '📍',
+        t: 'מעקב בזמן אמת',
+        d: 'עקוב אחרי הנהג על המפה בזמן אמת. שתף קישור מעקב עם המשפחה.',
+        detail: {
+            sub: 'בזמן שאתה מחכה לנהג — ובזמן הנסיעה — אתה רואה בדיוק איפה הוא. ומשפחתך יכולה לראות גם.',
+            steps: [
+                { title: 'מיקום הנהג בזמן אמת', desc: 'ברגע שנהג קיבל את הנסיעה, מציגים לך איקון שלו על מפה חיה. מתעדכן כל 3 שניות — לא אומדן, GPS אמיתי.' },
+                { title: 'זמן הגעה מדויק', desc: 'ETA (זמן הגעה צפוי) מחושב כל הזמן מחדש לפי התנועה האמיתית — לא ממוצע היסטורי. יודע לעדכן כשיש פקק.' },
+                { title: 'שיתוף מעקב', desc: 'קישור מעקב שניתן לשלוח למשפחה ב-WhatsApp. הם רואים את הנסיעה שלך בזמן אמת — בלי להוריד אפליקציה.' },
+                { title: 'היסטוריית מסלול', desc: 'לאחר הנסיעה, המסלול המלא שמור וניתן לצפייה מהחשבונית. שימושי לתלונה במקרה של בעיה.' },
+            ],
+            tags: [
+                { label: '📡 GPS עדכון כל 3 שניות', cls: 'b' },
+                { label: '🔗 שיתוף קישור מעקב', cls: 'g' },
+            ],
+        },
+    },
+];
 /* ─── Self-contained styles (injected once, removed on unmount) ──────────── */
 const CSS = `
 .lp *, .lp *::before, .lp *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -76,13 +151,36 @@ const CSS = `
 .lp-sub{text-align:center;color:var(--muted);font-size:.98rem;max-width:500px;margin:0 auto 52px;line-height:1.65;}
 /* Feature cards */
 .lp-g4{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;}
-.lp-fc{background:var(--card);border:1px solid var(--cb);border-radius:var(--r);padding:28px 24px;position:relative;overflow:hidden;transition:transform .3s,background .3s,border-color .3s;}
+.lp-fc{background:var(--card);border:1px solid var(--cb);border-radius:var(--r);padding:28px 24px;position:relative;overflow:hidden;transition:transform .3s,background .3s,border-color .3s;cursor:pointer;text-align:right;width:100%;font-family:inherit;color:inherit;}
 .lp-fc::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--blue),var(--bluel));opacity:0;transition:opacity .3s;}
 .lp-fc:hover{transform:translateY(-5px);background:rgba(37,99,235,.08);border-color:rgba(96,165,250,.22);}
 .lp-fc:hover::before{opacity:1;}
+.lp-fc.active{background:rgba(37,99,235,.12);border-color:rgba(96,165,250,.4);}
+.lp-fc.active::before{opacity:1;}
 .lp-fi{font-size:2rem;margin-bottom:14px;}
 .lp-ft{font-size:1rem;font-weight:700;margin-bottom:8px;}
 .lp-fd{font-size:.875rem;color:var(--muted);line-height:1.6;}
+.lp-fc-hint{font-size:.72rem;color:rgba(96,165,250,.6);margin-top:12px;display:flex;align-items:center;gap:4px;}
+/* Feature modal */
+.lp-foverlay{position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.65);backdrop-filter:blur(4px);display:flex;align-items:flex-end;justify-content:center;animation:lpFo .2s ease;}
+@keyframes lpFo{from{opacity:0}to{opacity:1}}
+.lp-fmodal{background:linear-gradient(160deg,#0f1e45 0%,#070B14 100%);border:1px solid rgba(96,165,250,.18);border-radius:24px 24px 0 0;padding:32px 28px 44px;width:100%;max-width:540px;max-height:85vh;overflow-y:auto;animation:lpFs .3s cubic-bezier(.4,0,.2,1);}
+@keyframes lpFs{from{transform:translateY(60px);opacity:0}to{transform:translateY(0);opacity:1}}
+.lp-fmhead{display:flex;align-items:center;gap:14px;margin-bottom:22px;}
+.lp-fmico{font-size:2.4rem;}
+.lp-fmtitle{font-size:1.15rem;font-weight:800;flex:1;}
+.lp-fmclose{background:rgba(255,255,255,.08);border:none;border-radius:50%;width:34px;height:34px;color:var(--muted);font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.lp-fmclose:hover{background:rgba(255,255,255,.15);}
+.lp-fmsub{color:var(--muted);font-size:.88rem;line-height:1.75;margin-bottom:18px;}
+.lp-fmsteps{display:flex;flex-direction:column;gap:14px;margin-bottom:20px;}
+.lp-fmstep{display:flex;gap:14px;align-items:flex-start;}
+.lp-fmsn{width:28px;height:28px;border-radius:50%;background:rgba(37,99,235,.3);border:1.5px solid rgba(96,165,250,.5);color:var(--bluel);font-size:.8rem;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;}
+.lp-fmst{font-size:.88rem;color:var(--white);line-height:1.65;}
+.lp-fmst strong{color:#fff;}
+.lp-fmtag{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:100px;font-size:.75rem;font-weight:700;margin-top:14px;}
+.lp-fmtag.g{background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.3);}
+.lp-fmtag.b{background:rgba(37,99,235,.2);color:var(--bluel);border:1px solid rgba(96,165,250,.3);}
+.lp-fmtag.y{background:rgba(251,191,36,.12);color:#fbbf24;border:1px solid rgba(251,191,36,.3);}
 /* Steps */
 .lp-steps{display:flex;justify-content:center;flex-wrap:wrap;max-width:880px;margin:0 auto;}
 .lp-step{flex:1;min-width:160px;text-align:center;padding:0 16px;position:relative;}
@@ -151,6 +249,14 @@ const CSS = `
 `;
 export default function Landing() {
     const [scrolled, setScrolled] = useState(false);
+    const [activeFeature, setActiveFeature] = useState(null);
+    const closeFeature = useCallback(() => setActiveFeature(null), []);
+    useEffect(() => {
+        const handler = (e) => { if (e.key === 'Escape')
+            closeFeature(); };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [closeFeature]);
     useEffect(() => {
         const el = document.createElement('style');
         el.id = '__lp';
@@ -173,12 +279,7 @@ export default function Landing() {
             document.body.style.background = prevBg;
         };
     }, []);
-    return (_jsxs("div", { className: "lp", children: [_jsxs("nav", { className: `lp-nav${scrolled ? ' sc' : ''}`, children: [_jsxs("div", { className: "lp-logo", children: ["\uD83D\uDE95 Easy", _jsx("span", { className: "ac", children: "Taxi" }), " Israel"] }), _jsxs("div", { className: "lp-navr", children: [_jsx("a", { href: "/faq", className: "lp-ng", children: "\u05E9\u05D0\u05DC\u05D5\u05EA \u05D5\u05EA\u05E9\u05D5\u05D1\u05D5\u05EA" }), _jsx("a", { href: "/login", className: "lp-ng", children: "\u05DB\u05E0\u05D9\u05E1\u05D4" }), _jsx("a", { href: "/app", className: "lp-ns", children: "\u05D4\u05D6\u05DE\u05DF \u05E0\u05E1\u05D9\u05E2\u05D4" })] })] }), _jsxs("section", { className: "lp-hero", children: [_jsx("div", { className: "lp-hbg" }), _jsx("div", { className: "lp-hgrid" }), _jsxs("div", { className: "lp-hi", children: [_jsxs("div", { className: "lp-badge", children: [_jsx("span", { className: "lp-bdot" }), "\u05E4\u05E2\u05D9\u05DC \u05E2\u05DB\u05E9\u05D9\u05D5 \u05D1\u05DB\u05DC \u05D4\u05D0\u05E8\u05E5"] }), _jsxs("h1", { className: "lp-h1", children: ["\u05D4\u05D3\u05E8\u05DA \u05D4\u05D7\u05DB\u05DE\u05D4", _jsx("br", {}), _jsx("span", { className: "gr", children: "\u05DC\u05D4\u05D6\u05DE\u05D9\u05DF \u05E0\u05E1\u05D9\u05E2\u05D4" })] }), _jsxs("p", { className: "lp-hs", children: ["EasyTaxi Israel \u2014 AI \u05DE\u05D5\u05E6\u05D0 \u05DC\u05DA \u05E0\u05D4\u05D2 \u05EA\u05D5\u05DA \u05E9\u05E0\u05D9\u05D5\u05EA.", _jsx("br", {}), "\u05DE\u05D7\u05D9\u05E8 \u05E9\u05E7\u05D5\u05E3 \u05DC\u05E4\u05E0\u05D9 \u05D4\u05E2\u05DC\u05D9\u05D9\u05D4. \u05DE\u05E2\u05E7\u05D1 \u05D1\u05D6\u05DE\u05DF \u05D0\u05DE\u05EA. \u05DC\u05DC\u05D0 \u05D4\u05E4\u05EA\u05E2\u05D5\u05EA."] }), _jsxs("div", { className: "lp-hb", children: [_jsx("a", { href: "/app", className: "lp-btx p", children: "\uD83D\uDE95 \u05D4\u05D6\u05DE\u05DF \u05E0\u05E1\u05D9\u05E2\u05D4 \u05E2\u05DB\u05E9\u05D9\u05D5" }), _jsx("a", { href: "/driver", className: "lp-btx g", children: "\uD83D\uDE97 \u05D4\u05E6\u05D8\u05E8\u05E3 \u05DB\u05E0\u05D4\u05D2" }), _jsx("a", { href: "https://wa.me/447474775344?text=%D7%A9%D7%9C%D7%95%D7%9D%2C%20%D7%90%D7%A0%D7%99%20%D7%A8%D7%95%D7%A6%D7%94%20%D7%9C%D7%94%D7%96%D7%9E%D7%99%D7%9F%20%D7%A0%D7%A1%D7%99%D7%A2%D7%94%20%F0%9F%9A%95", target: "_blank", rel: "noopener noreferrer", className: "lp-btx w", children: "\uD83D\uDCAC WhatsApp" })] })] }), _jsxs("div", { className: "lp-sh", children: [_jsx("div", { className: "lp-mouse" }), _jsx("span", { children: "\u05D2\u05DC\u05D5\u05DC \u05DC\u05DE\u05D8\u05D4" })] })] }), _jsx("div", { className: "lp-sb", children: _jsxs("div", { className: "lp-si", children: [_jsxs("div", { className: "lp-st", children: [_jsx("div", { className: "lp-stn", children: "~3 \u05D3\u05E7'" }), _jsx("div", { className: "lp-stl", children: "\u05D6\u05DE\u05DF \u05D4\u05D2\u05E2\u05D4 \u05DE\u05DE\u05D5\u05E6\u05E2" })] }), _jsx("div", { className: "lp-sep" }), _jsxs("div", { className: "lp-st", children: [_jsx("div", { className: "lp-stn", children: "AI 100%" }), _jsx("div", { className: "lp-stl", children: "\u05D4\u05EA\u05D0\u05DE\u05EA \u05E0\u05D4\u05D2\u05D9\u05DD \u05D7\u05DB\u05DE\u05D4" })] }), _jsx("div", { className: "lp-sep" }), _jsxs("div", { className: "lp-st", children: [_jsx("div", { className: "lp-stn", children: "0 \u20AA" }), _jsx("div", { className: "lp-stl", children: "\u05E2\u05DE\u05DC\u05EA \u05D4\u05E6\u05D8\u05E8\u05E4\u05D5\u05EA \u05DC\u05E0\u05D4\u05D2\u05D9\u05DD" })] }), _jsx("div", { className: "lp-sep" }), _jsxs("div", { className: "lp-st", children: [_jsx("div", { className: "lp-stn", children: "24/7" }), _jsx("div", { className: "lp-stl", children: "\u05D6\u05DE\u05D9\u05E0\u05D5\u05EA \u05DE\u05DC\u05D0\u05D4" })] })] }) }), _jsxs("div", { className: "lp-sec", children: [_jsx("p", { className: "lp-ey lp-in", children: "\u05DC\u05DE\u05D4 EasyTaxi" }), _jsx("h2", { className: "lp-t2 lp-in", children: "\u05E9\u05D5\u05E0\u05D4 \u05DE\u05DB\u05DC \u05DE\u05D4 \u05E9\u05D4\u05DB\u05E8\u05EA" }), _jsx("p", { className: "lp-sub lp-in", children: "\u05D8\u05DB\u05E0\u05D5\u05DC\u05D5\u05D2\u05D9\u05D4 \u05DE\u05EA\u05E7\u05D3\u05DE\u05EA, \u05E9\u05E7\u05D9\u05E4\u05D5\u05EA \u05DE\u05DC\u05D0\u05D4 \u05D5\u05EA\u05DE\u05D9\u05DB\u05D4 24/7" }), _jsx("div", { className: "lp-g4", children: [
-                            { ico: '🤖', t: 'AI מוצא נהג טוב יותר', d: 'אלגוריתם חכם מתאים נהג לפי מיקום, דירוג ומהירות תגובה — תוך שניות.' },
-                            { ico: '💰', t: 'מחיר שקוף בזמן אמת', d: 'אתה יודע כמה תשלם לפני שאתה עולה לרכב. לא עוד הפתעות בסוף הנסיעה.' },
-                            { ico: '⚖️', t: 'מערכת חוקית מלאה', d: 'כל נהג מאומת — רישיון בתוקף, ביטוח ובדיקת גיל רכב. אנחנו מטפלים בהכל.' },
-                            { ico: '📍', t: 'מעקב בזמן אמת', d: 'עקוב אחרי הנהג על המפה בזמן אמת. שתף קישור מעקב עם המשפחה.' },
-                        ].map((f, i) => (_jsxs("div", { className: `lp-fc lp-in lp-d${i + 1}`, children: [_jsx("div", { className: "lp-fi", children: f.ico }), _jsx("div", { className: "lp-ft", children: f.t }), _jsx("div", { className: "lp-fd", children: f.d })] }, i))) })] }), _jsx("div", { className: "lp-stripe", children: _jsxs("div", { className: "lp-sec", children: [_jsx("p", { className: "lp-ey lp-in", children: "\u05E4\u05E9\u05D5\u05D8 \u05D5\u05D1\u05E8\u05D5\u05E8" }), _jsx("h2", { className: "lp-t2 lp-in", children: "\u05D0\u05D9\u05DA \u05D6\u05D4 \u05E2\u05D5\u05D1\u05D3?" }), _jsx("p", { className: "lp-sub lp-in", children: "4 \u05E9\u05DC\u05D1\u05D9\u05DD. \u05D4\u05DB\u05DC \u05D0\u05D5\u05D8\u05D5\u05DE\u05D8\u05D9." }), _jsx("div", { className: "lp-steps", children: [
+    return (_jsxs("div", { className: "lp", children: [_jsxs("nav", { className: `lp-nav${scrolled ? ' sc' : ''}`, children: [_jsxs("div", { className: "lp-logo", children: ["\uD83D\uDE95 Easy", _jsx("span", { className: "ac", children: "Taxi" }), " Israel"] }), _jsxs("div", { className: "lp-navr", children: [_jsx("a", { href: "/faq", className: "lp-ng", children: "\u05E9\u05D0\u05DC\u05D5\u05EA \u05D5\u05EA\u05E9\u05D5\u05D1\u05D5\u05EA" }), _jsx("a", { href: "/login", className: "lp-ng", children: "\u05DB\u05E0\u05D9\u05E1\u05D4" }), _jsx("a", { href: "/app", className: "lp-ns", children: "\u05D4\u05D6\u05DE\u05DF \u05E0\u05E1\u05D9\u05E2\u05D4" })] })] }), _jsxs("section", { className: "lp-hero", children: [_jsx("div", { className: "lp-hbg" }), _jsx("div", { className: "lp-hgrid" }), _jsxs("div", { className: "lp-hi", children: [_jsxs("div", { className: "lp-badge", children: [_jsx("span", { className: "lp-bdot" }), "\u05E4\u05E2\u05D9\u05DC \u05E2\u05DB\u05E9\u05D9\u05D5 \u05D1\u05DB\u05DC \u05D4\u05D0\u05E8\u05E5"] }), _jsxs("h1", { className: "lp-h1", children: ["\u05D4\u05D3\u05E8\u05DA \u05D4\u05D7\u05DB\u05DE\u05D4", _jsx("br", {}), _jsx("span", { className: "gr", children: "\u05DC\u05D4\u05D6\u05DE\u05D9\u05DF \u05E0\u05E1\u05D9\u05E2\u05D4" })] }), _jsxs("p", { className: "lp-hs", children: ["EasyTaxi Israel \u2014 AI \u05DE\u05D5\u05E6\u05D0 \u05DC\u05DA \u05E0\u05D4\u05D2 \u05EA\u05D5\u05DA \u05E9\u05E0\u05D9\u05D5\u05EA.", _jsx("br", {}), "\u05DE\u05D7\u05D9\u05E8 \u05E9\u05E7\u05D5\u05E3 \u05DC\u05E4\u05E0\u05D9 \u05D4\u05E2\u05DC\u05D9\u05D9\u05D4. \u05DE\u05E2\u05E7\u05D1 \u05D1\u05D6\u05DE\u05DF \u05D0\u05DE\u05EA. \u05DC\u05DC\u05D0 \u05D4\u05E4\u05EA\u05E2\u05D5\u05EA."] }), _jsxs("div", { className: "lp-hb", children: [_jsx("a", { href: "/app", className: "lp-btx p", children: "\uD83D\uDE95 \u05D4\u05D6\u05DE\u05DF \u05E0\u05E1\u05D9\u05E2\u05D4 \u05E2\u05DB\u05E9\u05D9\u05D5" }), _jsx("a", { href: "/driver", className: "lp-btx g", children: "\uD83D\uDE97 \u05D4\u05E6\u05D8\u05E8\u05E3 \u05DB\u05E0\u05D4\u05D2" }), _jsx("a", { href: "https://wa.me/972552858732?text=%D7%94%D7%99%D7%99%2C%20%D7%90%D7%A9%D7%9E%D7%97%20%D7%9C%D7%A7%D7%91%D7%9C%20%D7%A2%D7%96%D7%A8%D7%94%20%D7%91%D7%A0%D7%95%D7%A9%D7%90%20EasyTaxi", target: "_blank", rel: "noopener noreferrer", className: "lp-btx w", children: "\uD83D\uDCAC WhatsApp" })] })] }), _jsxs("div", { className: "lp-sh", children: [_jsx("div", { className: "lp-mouse" }), _jsx("span", { children: "\u05D2\u05DC\u05D5\u05DC \u05DC\u05DE\u05D8\u05D4" })] })] }), _jsx("div", { className: "lp-sb", children: _jsxs("div", { className: "lp-si", children: [_jsxs("div", { className: "lp-st", children: [_jsx("div", { className: "lp-stn", children: "~3 \u05D3\u05E7'" }), _jsx("div", { className: "lp-stl", children: "\u05D6\u05DE\u05DF \u05D4\u05D2\u05E2\u05D4 \u05DE\u05DE\u05D5\u05E6\u05E2" })] }), _jsx("div", { className: "lp-sep" }), _jsxs("div", { className: "lp-st", children: [_jsx("div", { className: "lp-stn", children: "AI 100%" }), _jsx("div", { className: "lp-stl", children: "\u05D4\u05EA\u05D0\u05DE\u05EA \u05E0\u05D4\u05D2\u05D9\u05DD \u05D7\u05DB\u05DE\u05D4" })] }), _jsx("div", { className: "lp-sep" }), _jsxs("div", { className: "lp-st", children: [_jsx("div", { className: "lp-stn", children: "0 \u20AA" }), _jsx("div", { className: "lp-stl", children: "\u05E2\u05DE\u05DC\u05EA \u05D4\u05E6\u05D8\u05E8\u05E4\u05D5\u05EA \u05DC\u05E0\u05D4\u05D2\u05D9\u05DD" })] }), _jsx("div", { className: "lp-sep" }), _jsxs("div", { className: "lp-st", children: [_jsx("div", { className: "lp-stn", children: "24/7" }), _jsx("div", { className: "lp-stl", children: "\u05D6\u05DE\u05D9\u05E0\u05D5\u05EA \u05DE\u05DC\u05D0\u05D4" })] })] }) }), _jsxs("div", { className: "lp-sec", children: [_jsx("p", { className: "lp-ey lp-in", children: "\u05DC\u05DE\u05D4 EasyTaxi" }), _jsx("h2", { className: "lp-t2 lp-in", children: "\u05E9\u05D5\u05E0\u05D4 \u05DE\u05DB\u05DC \u05DE\u05D4 \u05E9\u05D4\u05DB\u05E8\u05EA" }), _jsx("p", { className: "lp-sub lp-in", children: "\u05D8\u05DB\u05E0\u05D5\u05DC\u05D5\u05D2\u05D9\u05D4 \u05DE\u05EA\u05E7\u05D3\u05DE\u05EA, \u05E9\u05E7\u05D9\u05E4\u05D5\u05EA \u05DE\u05DC\u05D0\u05D4 \u05D5\u05EA\u05DE\u05D9\u05DB\u05D4 24/7" }), _jsx("div", { className: "lp-g4", children: FEATURES.map((f, i) => (_jsxs("button", { className: `lp-fc lp-in lp-d${i + 1}${activeFeature?.t === f.t ? ' active' : ''}`, onClick: () => setActiveFeature(f), children: [_jsx("div", { className: "lp-fi", children: f.ico }), _jsx("div", { className: "lp-ft", children: f.t }), _jsx("div", { className: "lp-fd", children: f.d }), _jsx("div", { className: "lp-fc-hint", children: "\uD83D\uDCA1 \u05DC\u05D7\u05E5 \u05DC\u05E4\u05E8\u05D8\u05D9\u05DD \u2190" })] }, i))) })] }), _jsx("div", { className: "lp-stripe", children: _jsxs("div", { className: "lp-sec", children: [_jsx("p", { className: "lp-ey lp-in", children: "\u05E4\u05E9\u05D5\u05D8 \u05D5\u05D1\u05E8\u05D5\u05E8" }), _jsx("h2", { className: "lp-t2 lp-in", children: "\u05D0\u05D9\u05DA \u05D6\u05D4 \u05E2\u05D5\u05D1\u05D3?" }), _jsx("p", { className: "lp-sub lp-in", children: "4 \u05E9\u05DC\u05D1\u05D9\u05DD. \u05D4\u05DB\u05DC \u05D0\u05D5\u05D8\u05D5\u05DE\u05D8\u05D9." }), _jsx("div", { className: "lp-steps", children: [
                                 { n: '1', ico: '📱', t: 'מזמינים', d: 'מזינים מוצא ויעד — המערכת מחשבת מחיר מיד' },
                                 { n: '2', ico: '🚗', t: 'נהג בדרך', d: 'AI בוחר נהג קרוב ומאומת. הוא כבר בדרך' },
                                 { n: '3', ico: '🗺️', t: 'נוסעים', d: 'נסיעה בטוחה עם מעקב GPS בזמן אמת' },
@@ -192,5 +293,5 @@ export default function Landing() {
                             { ico: '🔐', t: 'אבטחה מלאה', d: 'כל המידע שלך מוצפן. מספר הטלפון שלך לא נחשף לנהג, ולא לנו.' },
                             { ico: '✅', t: 'נהגים מאומתים', d: 'כל נהג עובר אימות זהות, בדיקת רישיון, ביטוח וגיל רכב — לפני שאפשר לעבוד.' },
                             { ico: '💳', t: 'תשלום שקוף', d: 'רואים מחיר מדויק לפני הנסיעה. אין תוספות מפתיעות. חשבונית דיגיטלית אוטומטית.' },
-                        ].map((t, i) => (_jsxs("div", { className: `lp-tc lp-in lp-d${i + 1}`, children: [_jsx("div", { className: "lp-tcico", children: t.ico }), _jsxs("div", { className: "lp-tct", children: [_jsx("h3", { children: t.t }), _jsx("p", { children: t.d })] })] }, i))) })] }), _jsxs("section", { className: "lp-ctaw", children: [_jsx("div", { className: "lp-ctag" }), _jsx("h2", { className: "lp-ctat lp-in", children: "\u05DE\u05D5\u05DB\u05DF \u05DC\u05D4\u05D6\u05DE\u05D9\u05DF \u05E0\u05E1\u05D9\u05E2\u05D4?" }), _jsx("p", { className: "lp-ctas lp-in", children: "\u05D4\u05E6\u05D8\u05E8\u05E3 \u05DC\u05D0\u05DC\u05E4\u05D9 \u05DE\u05E9\u05EA\u05DE\u05E9\u05D9\u05DD \u05E9\u05DB\u05D1\u05E8 \u05E0\u05D5\u05E1\u05E2\u05D9\u05DD \u05E2\u05DD EasyTaxi Israel" }), _jsxs("div", { className: "lp-ctab", children: [_jsx("a", { href: "/app", className: "lp-btx p", style: { fontSize: '1.1rem', padding: '18px 38px' }, children: "\uD83D\uDE95 \u05D4\u05D6\u05DE\u05DF \u05E0\u05E1\u05D9\u05E2\u05D4 \u05E2\u05DB\u05E9\u05D9\u05D5" }), _jsx("a", { href: "/driver", className: "lp-btx g", style: { fontSize: '1.1rem', padding: '18px 38px' }, children: "\uD83D\uDE97 \u05D4\u05E6\u05D8\u05E8\u05E3 \u05DB\u05E0\u05D4\u05D2" }), _jsx("a", { href: "https://wa.me/447474775344?text=%D7%A9%D7%9C%D7%95%D7%9D%2C%20%D7%90%D7%A0%D7%99%20%D7%A8%D7%95%D7%A6%D7%94%20%D7%9C%D7%94%D7%96%D7%9E%D7%99%D7%9F%20%D7%A0%D7%A1%D7%99%D7%A2%D7%94%20%F0%9F%9A%95", target: "_blank", rel: "noopener noreferrer", className: "lp-btx w", style: { fontSize: '1.1rem', padding: '18px 38px' }, children: "\uD83D\uDCAC WhatsApp" })] })] }), _jsxs("footer", { className: "lp-ft2", children: [_jsxs("div", { children: ["\uD83D\uDE95 EasyTaxi Israel \u00A9 ", new Date().getFullYear()] }), _jsxs("div", { className: "lp-ftl", children: [_jsx("a", { href: "/login", children: "\u05DB\u05E0\u05D9\u05E1\u05D4" }), _jsx("a", { href: "/guest", children: "\u05DE\u05D7\u05D9\u05E8\u05D9\u05DD" }), _jsx("a", { href: "/faq", children: "\u05E9\u05D0\u05DC\u05D5\u05EA \u05D5\u05EA\u05E9\u05D5\u05D1\u05D5\u05EA" }), _jsx("a", { href: "/app", children: "\u05D4\u05D6\u05DE\u05DF \u05E0\u05E1\u05D9\u05E2\u05D4" }), _jsx("a", { href: "https://wa.me/447474775344", target: "_blank", rel: "noopener noreferrer", children: "WhatsApp" }), _jsx("a", { href: "/whatsapp-setup.html", style: { opacity: 0.35, fontSize: '0.72rem', letterSpacing: '0.5px' }, children: "\u2699 \u05D0\u05D3\u05DE\u05D9\u05DF" })] })] }), _jsx("a", { href: "https://wa.me/447474775344", target: "_blank", rel: "noopener noreferrer", className: "lp-wa", title: "\u05E9\u05DC\u05D7 \u05D4\u05D5\u05D3\u05E2\u05D4 \u05D1\u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4", children: "\uD83D\uDCAC" })] }));
+                        ].map((t, i) => (_jsxs("div", { className: `lp-tc lp-in lp-d${i + 1}`, children: [_jsx("div", { className: "lp-tcico", children: t.ico }), _jsxs("div", { className: "lp-tct", children: [_jsx("h3", { children: t.t }), _jsx("p", { children: t.d })] })] }, i))) })] }), _jsxs("section", { className: "lp-ctaw", children: [_jsx("div", { className: "lp-ctag" }), _jsx("h2", { className: "lp-ctat lp-in", children: "\u05DE\u05D5\u05DB\u05DF \u05DC\u05D4\u05D6\u05DE\u05D9\u05DF \u05E0\u05E1\u05D9\u05E2\u05D4?" }), _jsx("p", { className: "lp-ctas lp-in", children: "\u05D4\u05E6\u05D8\u05E8\u05E3 \u05DC\u05D0\u05DC\u05E4\u05D9 \u05DE\u05E9\u05EA\u05DE\u05E9\u05D9\u05DD \u05E9\u05DB\u05D1\u05E8 \u05E0\u05D5\u05E1\u05E2\u05D9\u05DD \u05E2\u05DD EasyTaxi Israel" }), _jsxs("div", { className: "lp-ctab", children: [_jsx("a", { href: "/app", className: "lp-btx p", style: { fontSize: '1.1rem', padding: '18px 38px' }, children: "\uD83D\uDE95 \u05D4\u05D6\u05DE\u05DF \u05E0\u05E1\u05D9\u05E2\u05D4 \u05E2\u05DB\u05E9\u05D9\u05D5" }), _jsx("a", { href: "/driver", className: "lp-btx g", style: { fontSize: '1.1rem', padding: '18px 38px' }, children: "\uD83D\uDE97 \u05D4\u05E6\u05D8\u05E8\u05E3 \u05DB\u05E0\u05D4\u05D2" }), _jsx("a", { href: "https://wa.me/972552858732?text=%D7%94%D7%99%D7%99%2C%20%D7%90%D7%A9%D7%9E%D7%97%20%D7%9C%D7%A7%D7%91%D7%9C%20%D7%A2%D7%96%D7%A8%D7%94%20%D7%91%D7%A0%D7%95%D7%A9%D7%90%20EasyTaxi", target: "_blank", rel: "noopener noreferrer", className: "lp-btx w", style: { fontSize: '1.1rem', padding: '18px 38px' }, children: "\uD83D\uDCAC WhatsApp" })] })] }), _jsxs("footer", { className: "lp-ft2", children: [_jsxs("div", { children: ["\uD83D\uDE95 EasyTaxi Israel \u00A9 ", new Date().getFullYear()] }), _jsxs("div", { className: "lp-ftl", children: [_jsx("a", { href: "/login", children: "\u05DB\u05E0\u05D9\u05E1\u05D4" }), _jsx("a", { href: "/guest", children: "\u05DE\u05D7\u05D9\u05E8\u05D9\u05DD" }), _jsx("a", { href: "/faq", children: "\u05E9\u05D0\u05DC\u05D5\u05EA \u05D5\u05EA\u05E9\u05D5\u05D1\u05D5\u05EA" }), _jsx("a", { href: "/app", children: "\u05D4\u05D6\u05DE\u05DF \u05E0\u05E1\u05D9\u05E2\u05D4" }), _jsx("a", { href: "https://wa.me/972552858732?text=%D7%94%D7%99%D7%99%2C%20%D7%90%D7%A9%D7%9E%D7%97%20%D7%9C%D7%A7%D7%91%D7%9C%20%D7%A2%D7%96%D7%A8%D7%94%20%D7%91%D7%A0%D7%95%D7%A9%D7%90%20EasyTaxi", target: "_blank", rel: "noopener noreferrer", children: "WhatsApp" }), _jsx("a", { href: "/admin/", style: { opacity: 0.35, fontSize: '0.72rem', letterSpacing: '0.5px' }, children: "\u2699 \u05D0\u05D3\u05DE\u05D9\u05DF" })] })] }), _jsx("a", { href: "https://wa.me/972552858732?text=%D7%94%D7%99%D7%99%2C%20%D7%90%D7%A9%D7%9E%D7%97%20%D7%9C%D7%A7%D7%91%D7%9C%20%D7%A2%D7%96%D7%A8%D7%94%20%D7%91%D7%A0%D7%95%D7%A9%D7%90%20EasyTaxi", target: "_blank", rel: "noopener noreferrer", className: "lp-wa", title: "\u05E9\u05DC\u05D7 \u05D4\u05D5\u05D3\u05E2\u05D4 \u05D1\u05D5\u05D5\u05D0\u05D8\u05E1\u05D0\u05E4", children: "\uD83D\uDCAC" }), activeFeature && (_jsx("div", { className: "lp-foverlay", onClick: closeFeature, children: _jsxs("div", { className: "lp-fmodal", onClick: e => e.stopPropagation(), children: [_jsxs("div", { className: "lp-fmhead", children: [_jsx("span", { className: "lp-fmico", children: activeFeature.ico }), _jsx("span", { className: "lp-fmtitle", children: activeFeature.t }), _jsx("button", { className: "lp-fmclose", onClick: closeFeature, "aria-label": "\u05E1\u05D2\u05D5\u05E8", children: "\u2715" })] }), _jsx("p", { className: "lp-fmsub", children: activeFeature.detail.sub }), _jsx("div", { className: "lp-fmsteps", children: activeFeature.detail.steps.map((s, i) => (_jsxs("div", { className: "lp-fmstep", children: [_jsx("div", { className: "lp-fmsn", children: i + 1 }), _jsxs("div", { className: "lp-fmst", children: [_jsx("strong", { children: s.title }), _jsx("br", {}), s.desc] })] }, i))) }), _jsx("div", { style: { display: 'flex', gap: 8, flexWrap: 'wrap' }, children: activeFeature.detail.tags.map((tag, i) => (_jsx("span", { className: `lp-fmtag ${tag.cls}`, children: tag.label }, i))) })] }) }))] }));
 }

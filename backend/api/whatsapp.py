@@ -149,7 +149,11 @@ async def _handle_auth_message(phone: str, text: str, db: AsyncSession, msg_id: 
     )
     from services import whatsapp as whatsapp_svc
 
-    if WA_AUTH_MESSAGE_PREFIX not in text:
+    if WA_AUTH_MESSAGE_PREFIX not in text and "EasyTaxi:" not in text:
+        return False
+
+    # Not an auth message if it doesn't contain the pipe separator with a token
+    if "|" not in text:
         return False
 
     # Extract token — format: "🔐 EasyTaxi: אמת אותי | <token>"
@@ -269,6 +273,37 @@ async def _handle_auth_message(phone: str, text: str, db: AsyncSession, msg_id: 
     return True
 
 
+async def _handle_support_message(phone: str, text: str, reply_jid: str | None = None) -> None:
+    """Route a regular incoming WhatsApp message through the SupportAgent and reply."""
+    from services import whatsapp as whatsapp_svc
+    from services.agents.support import SupportAgent
+
+    print(f"[SUPPORT] called phone={phone} reply_jid={reply_jid} text={repr(text[:100])}", flush=True)
+    agent = SupportAgent()
+    try:
+        result = await agent.run({"message": text, "user_role": "passenger", "context": {}, "history": []})
+        print(f"[SUPPORT] agent result success={result.success} data={result.data}", flush=True)
+        reply = (result.data or {}).get("response") if result.data else None
+    except Exception as exc:
+        logger.exception("SupportAgent error: %s", exc)
+        print(f"[SUPPORT] exception: {exc}", flush=True)
+        reply = None
+
+    if not reply:
+        is_heb = any("\u05d0" <= c <= "\u05ea" for c in text)
+        reply = (
+            "תודה על פנייתך 🙏 נציג שירות יחזור אליך בהקדם."
+            if is_heb
+            else "Thank you for contacting us. A support agent will follow up shortly."
+        )
+
+    if reply_jid:
+        await whatsapp_svc.send_text_to_jid(reply_jid, reply)
+    else:
+        await whatsapp_svc.send_text(phone, reply)
+
+
+
 @router.post("/webhook", summary="Receive incoming WhatsApp events from Evolution API")
 async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> dict:
     """
@@ -285,6 +320,7 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
     event = payload.get("event", "")
     data = payload.get("data", {})
     print(f"[WH-RAW] event={repr(event)} data_keys={list(data.keys()) if isinstance(data, dict) else type(data).__name__}", flush=True)
+    print(f"[WH-FULL] payload_keys={list(payload.keys())} sender={repr(payload.get('sender'))} instance={repr(payload.get('instance'))}", flush=True)
 
     # Evolution API v1.8+ uses UPPERCASE event names; normalise for compatibility
     event_lower = event.lower().replace("_", ".")
@@ -296,25 +332,60 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
             return {"status": "ok"}
 
         remote_jid = key.get("remoteJid", "")
-        # @lid = Meta linked-device pseudonym — real phone is in top-level "sender" field
+        push_name = data.get("pushName", "")
+
         if remote_jid.endswith("@lid"):
-            sender_jid = payload.get("sender", "") or data.get("participant", "")
-            phone = sender_jid.replace("@s.whatsapp.net", "").replace("@lid", "").replace("@g.us", "")
+            from core.redis import redis_client
+            # Try to resolve @lid → real phone via Redis cache
+            cached_phone = await redis_client.get(f"lid_phone:{remote_jid}")
+            if cached_phone:
+                phone = cached_phone
+                reply_jid = None  # can now use real phone
+                print(f"[WH-LID] resolved {remote_jid} → {phone} (cache)", flush=True)
+            else:
+                # Fallback: scan contacts store for matching pushName
+                import os, json as _json
+                contacts_dir = f"/evolution/store/contacts/{settings.EVOLUTION_INSTANCE}"
+                resolved = None
+                try:
+                    for fname in os.listdir(contacts_dir):
+                        if not fname.endswith("@s.whatsapp.net.json"):
+                            continue
+                        with open(f"{contacts_dir}/{fname}") as f:
+                            c = _json.load(f)
+                        if push_name and c.get("pushName") == push_name:
+                            resolved = fname.replace("@s.whatsapp.net.json", "")
+                            break
+                except Exception:
+                    pass
+                if resolved:
+                    phone = resolved
+                    reply_jid = None
+                    await redis_client.set(f"lid_phone:{remote_jid}", phone, ex=86400 * 30)
+                    print(f"[WH-LID] resolved {remote_jid} → {phone} (pushName match)", flush=True)
+                else:
+                    phone = remote_jid.replace("@lid", "")
+                    reply_jid = remote_jid
+                    print(f"[WH-LID] unresolved {remote_jid}, pushName={push_name}", flush=True)
         else:
+            reply_jid = None
             phone = remote_jid.replace("@s.whatsapp.net", "").replace("@g.us", "")
-        msg_id = key.get("id")  # Evolution API message ID — used for deduplication
+
+        msg_id = key.get("id")
         msg_obj = data.get("message", {})
         text = (
             msg_obj.get("conversation")
             or msg_obj.get("extendedTextMessage", {}).get("text")
             or ""
         )
-        print(f"[WH-DEBUG] from={phone} fromMe={key.get('fromMe')} jid={remote_jid} text={repr(text[:200])} msg_keys={list(msg_obj.keys()) if msg_obj else []}", flush=True)
+        print(f"[WH-DEBUG] from={phone} reply_jid={reply_jid} jid={remote_jid} text={repr(text[:200])}", flush=True)
         logger.info("📨 WhatsApp incoming | from=%s | text=%s", phone, text[:120])
 
-        # Try to handle as auth message first
+        # Try to handle as auth message first; if not auth, pass to support bot
         if text:
-            await _handle_auth_message(phone, text, db, msg_id)
+            is_auth = await _handle_auth_message(phone, text, db, msg_id)
+            if not is_auth:
+                await _handle_support_message(phone, text, reply_jid=reply_jid)
 
     elif event_lower in ("connection.update",):
         state = data.get("state", "")

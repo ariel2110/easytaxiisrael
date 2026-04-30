@@ -1,11 +1,12 @@
-import type { AdminUser, DriverAdminRead, PlatformStats, AdminRide, AuditLog, AIAgent, AIChatResponse, AIKeyUpdateResponse } from '../types'
+import type { AdminUser, DriverAdminRead, PlatformStats, AdminRide, AuditLog, AIAgent, AIChatResponse, AIChatHistory, AIKeyUpdateResponse, VehicleCheckResult, SumsubApplicantsResponse } from '../types'
 
 const BASE = '/api'
+const ADMIN_KEY = 'e78a16747d74f1074e2c590d0cc4a074db43b4bc90ac19e2'
 
 function getToken() { return localStorage.getItem('admin_token') }
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_KEY }
   const t = getToken(); if (t) headers['Authorization'] = `Bearer ${t}`
   const res = await fetch(`${BASE}${path}`, {
     method, headers,
@@ -39,6 +40,14 @@ export const api = {
     setDriverType: (id: string, driver_type: string) =>
       req<AdminUser>('PATCH', `/admin/users/${id}/driver-type`, { driver_type }),
   },
+  vehicleCheck: {
+    get:  (driverId: string) => req<VehicleCheckResult>('GET',  `/admin/vehicle-check/${driverId}`),
+    run:  (driverId: string) => req<VehicleCheckResult>('POST', `/admin/vehicle-check/${driverId}/run`),
+  },
+  sumsub: {
+    applicants: (status?: string) =>
+      req<SumsubApplicantsResponse>('GET', `/admin/sumsub/applicants${status ? `?filter_status=${status}` : ''}`),
+  },
   drivers: {
     list: (skip = 0, limit = 100) =>
       req<DriverAdminRead[]>('GET', `/admin/drivers?skip=${skip}&limit=${limit}`),
@@ -54,9 +63,30 @@ export const api = {
   aiAgents: {
     list: () => req<AIAgent[]>('GET', '/admin/ai-agents'),
     chat: (agentId: string, message: string, model?: string) =>
-      req<AIChatResponse>('POST', `/admin/ai-agents/${agentId}/chat`, { message, model }),
-    updateKey: (agentId: string, api_key: string) =>
+      req<AIChatResponse>('POST', `/admin/ai-agents/${agentId}/chat`, { message, model }),    history: (agentId: string) => req<AIChatHistory[]>('GET', `/admin/ai-agents/${agentId}/history`),    updateKey: (agentId: string, api_key: string) =>
       req<AIKeyUpdateResponse>('PUT', `/admin/ai-agents/${agentId}/key`, { api_key }),
     disable: (agentId: string) => req<{ success: boolean }>('DELETE', `/admin/ai-agents/${agentId}/key`),
+  },
+  whatsapp: {
+    config: () => req<{ api_key: string; instance: string; evolution_url: string }>('GET', '/whatsapp/config'),
+    status: (adminKey: string) => fetch(`${BASE}/whatsapp/status`, {
+      headers: { 'X-Admin-Key': adminKey, 'Authorization': `Bearer ${getToken()}` },
+    }).then(r => r.json()),
+    qr: (adminKey: string) => fetch(`${BASE}/whatsapp/qr`, {
+      headers: { 'X-Admin-Key': adminKey, 'Authorization': `Bearer ${getToken()}` },
+    }).then(r => r.json()),
+    reconnect: (adminKey: string) => fetch(`${BASE}/whatsapp/reconnect`, {
+      method: 'POST',
+      headers: { 'X-Admin-Key': adminKey, 'Authorization': `Bearer ${getToken()}` },
+    }).then(r => r.json()),
+    fixWebhook: (adminKey: string) => fetch(`${BASE}/whatsapp/fix-webhook`, {
+      method: 'POST',
+      headers: { 'X-Admin-Key': adminKey, 'Authorization': `Bearer ${getToken()}` },
+    }).then(r => r.json()),
+    testSend: (adminKey: string, phone: string) => fetch(`${BASE}/whatsapp/test-send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey, 'Authorization': `Bearer ${getToken()}` },
+      body: JSON.stringify({ phone }),
+    }).then(r => r.json()),
   },
 }

@@ -1,6 +1,4 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
 import { api } from '../services/api'
 import type { AdminDriverItem, DocumentRead, ComplianceProfile } from '../services/api'
 
@@ -247,14 +245,170 @@ function DriverDetail({ driver }: { driver: AdminDriverItem }) {
   )
 }
 
+// ── WhatsApp Tab ──────────────────────────────────────────────────────────
+function WhatsAppTab() {
+  const [status, setStatus] = useState<{
+    state: string; owner_phone: string | null; profile_name: string | null;
+    configured_webhook: string | null; correct_webhook: string;
+    platform_phone: string; instance: string;
+  } | null>(null)
+  const [qr, setQr] = useState<string | null>(null)
+  const [loadingStatus, setLoadingStatus] = useState(true)
+  const [qrLoading, setQrLoading] = useState(false)
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
+  const [testPhone, setTestPhone] = useState('')
+  const [autoRefresh, setAutoRefresh] = useState(false)
+
+  const loadStatus = useCallback(async () => {
+    try {
+      const s = await api.whatsapp.status()
+      setStatus(s); return s
+    } catch { return null }
+  }, [])
+
+  useEffect(() => {
+    loadStatus().then(s => {
+      if (s?.state !== 'open') {
+        api.whatsapp.qr().then((d: { base64?: string; qr?: { base64?: string } }) => {
+          setQr(d?.base64 || d?.qr?.base64 || null)
+        }).catch(() => {})
+      }
+      setLoadingStatus(false)
+    })
+  }, [loadStatus])
+
+  useEffect(() => {
+    if (!autoRefresh) return
+    const id = setInterval(async () => {
+      const s = await loadStatus()
+      if (s?.state === 'open') { setAutoRefresh(false); setQr(null); setMsg({ text: '✅ WhatsApp מחובר!', ok: true }) }
+    }, 5000)
+    return () => clearInterval(id)
+  }, [autoRefresh, loadStatus])
+
+  async function refreshQr() {
+    setQrLoading(true)
+    try {
+      const d: { base64?: string; qr?: { base64?: string } } = await api.whatsapp.qr()
+      setQr(d?.base64 || d?.qr?.base64 || null); setAutoRefresh(true)
+    } finally { setQrLoading(false) }
+  }
+
+  async function reconnect() {
+    setQrLoading(true); setMsg(null)
+    try {
+      const res = await api.whatsapp.reconnect()
+      setQr(res?.qr?.base64 || res?.base64 || null)
+      setStatus(prev => prev ? { ...prev, state: 'close' } : prev)
+      setAutoRefresh(true); setMsg({ text: '🔄 התנתק — סרוק QR חדש', ok: true })
+    } catch (e: unknown) { setMsg({ text: `שגיאה: ${(e as Error).message}`, ok: false }) }
+    finally { setQrLoading(false) }
+  }
+
+  async function fixWebhook() {
+    setMsg(null)
+    try {
+      const res = await api.whatsapp.fixWebhook()
+      setMsg({ text: res.status === 'ok' ? `✅ Webhook עודכן` : '❌ עדכון נכשל', ok: res.status === 'ok' })
+    } catch (e: unknown) { setMsg({ text: `שגיאה: ${(e as Error).message}`, ok: false }) }
+  }
+
+  async function testSend() {
+    if (!testPhone.trim()) return
+    setMsg(null)
+    try {
+      const res = await api.whatsapp.testSend(testPhone.trim())
+      setMsg({ text: res.status === 'ok' ? `✅ נשלח ל-${testPhone}` : `❌ שליחה נכשלה`, ok: res.status === 'ok' })
+    } catch (e: unknown) { setMsg({ text: `שגיאה: ${(e as Error).message}`, ok: false }) }
+  }
+
+  const isConnected = status?.state === 'open'
+  const webhookOk = status?.configured_webhook === status?.correct_webhook
+
+  if (loadingStatus) return <div className="ap-empty">⏳ טוען…</div>
+
+  return (
+    <div>
+      {/* Status */}
+      <div style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 14, padding: 16, marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div style={{ fontWeight: 700 }}>סטטוס חיבור</div>
+          <button className="ap-btn" style={{ background: 'rgba(255,255,255,.06)', color: '#94A3B8', border: '1px solid rgba(255,255,255,.1)', fontSize: '.8rem' }}
+            onClick={loadStatus}>↻ רענן</button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          {[
+            ['מצב', <span style={{ color: isConnected ? '#22C55E' : '#EF4444', fontWeight: 700 }}>{isConnected ? '🟢 מחובר' : '🔴 מנותק'}</span>],
+            ['מספר מחובר', status?.owner_phone ? `+${status.owner_phone}` : '—'],
+            ['שם פרופיל', status?.profile_name || '—'],
+            ['Webhook', webhookOk ? <span style={{ color: '#22C55E', fontSize: '.8rem' }}>✅ תקין</span> : <span style={{ color: '#F59E0B', fontSize: '.8rem' }}>⚠️ לא תקין</span>],
+          ].map(([label, value], i) => (
+            <div key={i} style={{ background: 'rgba(255,255,255,.03)', borderRadius: 8, padding: '10px 12px' }}>
+              <div style={{ fontSize: '.72rem', color: '#94A3B8', marginBottom: 4 }}>{label}</div>
+              <div style={{ fontWeight: 600, fontSize: '.9rem' }}>{value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* QR */}
+      {!isConnected && (
+        <div style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 14, padding: 16, marginBottom: 12, textAlign: 'center' }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>סריקת QR לחיבור</div>
+          <div style={{ color: '#94A3B8', fontSize: '.82rem', marginBottom: 16 }}>פתח WhatsApp → ⋮ → מכשירים מקושרים → קשר מכשיר → סרוק</div>
+          {qrLoading ? (
+            <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8' }}>⏳ טוען QR…</div>
+          ) : qr ? (
+            <div style={{ display: 'inline-block', background: '#fff', padding: 12, borderRadius: 12, marginBottom: 14 }}>
+              <img src={qr} alt="QR" style={{ display: 'block', width: 220, height: 220 }} />
+            </div>
+          ) : (
+            <div style={{ height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8', fontSize: '.88rem' }}>לחץ "QR חדש"</div>
+          )}
+          {autoRefresh && <div style={{ color: '#94A3B8', fontSize: '.8rem', marginBottom: 10 }}>⏳ מחכה לסריקה…</div>}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+            <button className="ap-btn ap-btn-blue" onClick={refreshQr} disabled={qrLoading}>📷 QR חדש</button>
+            <button className="ap-btn ap-btn-red" onClick={reconnect} disabled={qrLoading}>🔄 התנתק מחדש</button>
+          </div>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 14, padding: 16, marginBottom: 12 }}>
+        <div style={{ fontWeight: 700, marginBottom: 12 }}>⚙️ פעולות</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <button className="ap-btn" style={{ background: 'rgba(255,255,255,.06)', color: '#94A3B8', border: '1px solid rgba(255,255,255,.1)', fontSize: '.85rem' }} onClick={fixWebhook}>🔧 תקן Webhook</button>
+          {isConnected && <button className="ap-btn ap-btn-red" onClick={reconnect} style={{ fontSize: '.85rem' }}>🔄 נתק (QR חדש)</button>}
+        </div>
+      </div>
+
+      {/* Test send */}
+      <div style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 14, padding: 16, marginBottom: 12 }}>
+        <div style={{ fontWeight: 700, marginBottom: 12 }}>📤 שלח הודעת בדיקה</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input type="tel" placeholder="972501234567" value={testPhone} onChange={e => setTestPhone(e.target.value)}
+            className="ap-reject-input" style={{ direction: 'ltr' }} />
+          <button className="ap-btn ap-btn-blue" onClick={testSend} disabled={!testPhone.trim() || !isConnected} style={{ fontSize: '.85rem' }}>שלח</button>
+        </div>
+        {!isConnected && <div style={{ color: '#EF4444', fontSize: '.78rem', marginTop: 8 }}>⚠️ לא מחובר — לא ניתן לשלוח</div>}
+      </div>
+
+      {msg && (
+        <div style={{ padding: '10px 14px', borderRadius: 10, fontSize: '.88rem', background: msg.ok ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)', border: `1px solid ${msg.ok ? 'rgba(34,197,94,.3)' : 'rgba(239,68,68,.3)'}`, color: msg.ok ? '#22C55E' : '#EF4444' }}>
+          {msg.text}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────
 export default function AdminPanel() {
-  const { logout } = useAuth()
-  const navigate = useNavigate()
   const [drivers, setDrivers] = useState<AdminDriverItem[]>([])
   const [loading, setLoading] = useState(true)
   const [openId, setOpenId] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved'>('all')
+  const [mainTab, setMainTab] = useState<'drivers' | 'whatsapp'>('drivers')
 
   useEffect(() => {
     const el = document.createElement('style')
@@ -266,8 +420,6 @@ export default function AdminPanel() {
   useEffect(() => {
     api.admin.listDrivers().then(d => { setDrivers(d); setLoading(false) }).catch(() => setLoading(false))
   }, [])
-
-  function handleLogout() { logout(); navigate('/login', { replace: true }) }
 
   const filtered = drivers.filter(d =>
     filter === 'all' ? true
@@ -281,33 +433,38 @@ export default function AdminPanel() {
     <div className="ap">
       <div className="ap-hdr">
         <div className="ap-logo">🛠️ EasyTaxi — <span style={{ color: '#FDE047' }}>ניהול</span></div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {pendingCount > 0 && (
-            <span className="ap-pending-badge">⚠️ {pendingCount} נהגים עם מסמכים ממתינים</span>
-          )}
-          <button className="ap-logout" onClick={handleLogout}>יציאה</button>
-        </div>
+        {pendingCount > 0 && (
+          <span className="ap-pending-badge">⚠️ {pendingCount} נהגים עם מסמכים ממתינים</span>
+        )}
       </div>
 
       <div className="ap-body">
-        <div className="ap-section-title">ניהול נהגים — {drivers.length} נהגים רשומים</div>
-
-        <div className="ap-tabs">
-          {([['all', 'כולם'], ['pending', 'ממתינים לאישור'], ['approved', 'מאושרים']] as const).map(([v, l]) => (
-            <button key={v} className={`ap-tab${filter === v ? ' on' : ''}`} onClick={() => setFilter(v)}>{l}</button>
-          ))}
+        {/* Main tabs */}
+        <div className="ap-tabs" style={{ marginBottom: 20 }}>
+          <button className={`ap-tab${mainTab === 'drivers' ? ' on' : ''}`} onClick={() => setMainTab('drivers')}>🚗 נהגים</button>
+          <button className={`ap-tab${mainTab === 'whatsapp' ? ' on' : ''}`} onClick={() => setMainTab('whatsapp')}>💬 WhatsApp</button>
         </div>
 
-        {loading ? (
-          <div className="ap-empty">⏳ טוען נהגים…</div>
-        ) : filtered.length === 0 ? (
-          <div className="ap-empty">אין נהגים בקטגוריה זו</div>
-        ) : (
-          filtered.map(driver => {
-            const ac = authChip(driver.auth_status)
-            const isOpen = openId === driver.driver_id
-            return (
-              <div key={driver.driver_id} className={`ap-driver-card${isOpen ? ' open' : ''}`}>
+        {mainTab === 'whatsapp' ? <WhatsAppTab /> : (
+          <>
+            <div className="ap-section-title">ניהול נהגים — {drivers.length} נהגים רשומים</div>
+
+            <div className="ap-tabs">
+              {([['all', 'כולם'], ['pending', 'ממתינים לאישור'], ['approved', 'מאושרים']] as const).map(([v, l]) => (
+                <button key={v} className={`ap-tab${filter === v ? ' on' : ''}`} onClick={() => setFilter(v)}>{l}</button>
+              ))}
+            </div>
+
+            {loading ? (
+              <div className="ap-empty">⏳ טוען נהגים…</div>
+            ) : filtered.length === 0 ? (
+              <div className="ap-empty">אין נהגים בקטגוריה זו</div>
+            ) : (
+              filtered.map(driver => {
+                const ac = authChip(driver.auth_status)
+                const isOpen = openId === driver.driver_id
+                return (
+                  <div key={driver.driver_id} className={`ap-driver-card${isOpen ? ' open' : ''}`}>
                 <div className="ap-driver-row" onClick={() => setOpenId(isOpen ? null : driver.driver_id)}>
                   <div className="ap-driver-left">
                     <div className="ap-driver-avatar">🚗</div>
@@ -330,6 +487,8 @@ export default function AdminPanel() {
               </div>
             )
           })
+        )}
+          </>
         )}
       </div>
     </div>
