@@ -1,4 +1,4 @@
-import type { AdminUser, DriverAdminRead, PlatformStats, AdminRide, AuditLog, AIAgent, AIChatResponse, AIChatHistory, AIKeyUpdateResponse, VehicleCheckResult, SumsubApplicantsResponse, SystemHealth, DailyReport, DemoReportData, Lead, FindLeadsResponse, LeadsListResponse } from '../types'
+import type { AdminUser, DriverAdminRead, PlatformStats, AdminRide, AuditLog, AIAgent, AIChatResponse, AIChatHistory, AIKeyUpdateResponse, VehicleCheckResult, SumsubApplicantsResponse, SystemHealth, DailyReport, DemoReportData, Lead, FindLeadsResponse, LeadsListResponse, PendingApprovalItem } from '../types'
 
 const BASE = '/api'
 const ADMIN_KEY = 'e78a16747d74f1074e2c590d0cc4a074db43b4bc90ac19e2'
@@ -47,6 +47,11 @@ export const api = {
   sumsub: {
     applicants: (status?: string) =>
       req<SumsubApplicantsResponse>('GET', `/admin/sumsub/applicants${status ? `?filter_status=${status}` : ''}`),
+  },
+  pendingApprovals: {
+    list: () => req<{ total: number; items: PendingApprovalItem[] }>('GET', '/admin/pending-approvals'),
+    approve: (id: string) => req<AdminUser>('PATCH', `/admin/users/${id}/approve`),
+    reject:  (id: string) => req<AdminUser>('PATCH', `/admin/users/${id}/deactivate`),
   },
   drivers: {
     list: (skip = 0, limit = 100) =>

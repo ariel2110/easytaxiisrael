@@ -1,4 +1,6 @@
 import { NavLink } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { api } from '../services/api'
 
 interface Props {
   onLogout: () => void
@@ -6,6 +8,7 @@ interface Props {
 
 const NAV = [
   { to: '/admin/', label: 'סקירה',    icon: '📊', end: true },
+  { to: '/admin/pending', label: 'ממתין לאישור', icon: '⏳', end: false, badge: true },
   { to: '/admin/drivers', label: 'נהגים',  icon: '🚗', end: false },
   { to: '/admin/users',   label: 'משתמשים', icon: '👥', end: false },
   { to: '/admin/rides',   label: 'נסיעות',  icon: '🛣️', end: false },
@@ -24,6 +27,17 @@ const NAV_EXTERNAL = [
 ]
 
 export default function Sidebar({ onLogout }: Props) {
+  const [pendingCount, setPendingCount] = useState(0)
+
+  useEffect(() => {
+    // Poll pending approvals count every 60s
+    const fetchCount = () =>
+      api.stats.get().then(s => setPendingCount(s.pending_approvals ?? 0)).catch(() => {})
+    fetchCount()
+    const t = setInterval(fetchCount, 60_000)
+    return () => clearInterval(t)
+  }, [])
+
   return (
     <aside className="sidebar">
       {/* Logo */}
@@ -50,10 +64,18 @@ export default function Sidebar({ onLogout }: Props) {
               background: isActive ? 'rgba(255,215,0,0.07)' : 'transparent',
               borderRight: isActive ? '3px solid var(--accent)' : '3px solid transparent',
               transition: 'all 0.15s',
+              position: 'relative',
             })}
           >
             <span>{item.icon}</span>
-            <span>{item.label}</span>
+            <span style={{ flex: 1 }}>{item.label}</span>
+            {item.badge && pendingCount > 0 && (
+              <span style={{
+                background: '#ef4444', color: '#fff', borderRadius: '100px',
+                padding: '1px 7px', fontSize: '0.65rem', fontWeight: 800,
+                minWidth: '18px', textAlign: 'center',
+              }}>{pendingCount}</span>
+            )}
           </NavLink>
         ))}
 

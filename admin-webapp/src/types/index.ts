@@ -32,6 +32,25 @@ export interface PlatformStats {
   pending_rides: number
   total_revenue: number
   total_payments: number
+  pending_approvals: number
+}
+
+export interface PendingApprovalItem {
+  id: string
+  phone: string
+  full_name: string | null
+  driver_type: 'licensed_taxi' | 'rideshare' | null
+  auth_status: string
+  auth_status_label: string
+  is_active: boolean
+  created_at: string
+  // Sumsub data (optional)
+  sumsub_id?: string
+  level?: string
+  sumsub_status?: string
+  review_result?: string | null
+  reject_labels?: string[]
+  sumsub_updated_at?: string
 }
 
 export interface AdminRide {

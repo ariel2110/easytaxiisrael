@@ -124,21 +124,25 @@ async def poll_wa_auth(
             return WAAuthPollResponse(status="pending")
         return WAAuthPollResponse(status="expired")
 
-    # Completed — guide driver to Sumsub verification
+    # Completed — role-based post-login logic
     kyc_url: str | None = None
-    if result.get("role") == UserRole.driver.value:
-        from core.security import decode_access_token
-        try:
-            payload = decode_access_token(result["access_token"])
-            user_id = payload["sub"]
-            from sqlalchemy import select
-            res = await db.execute(select(User).where(User.id == user_id))
-            user = res.scalar_one_or_none()
-            if user and user.auth_status == AuthStatus.pending:
+    from core.security import decode_access_token
+    try:
+        payload = decode_access_token(result["access_token"])
+        user_id = payload["sub"]
+        from sqlalchemy import select
+        res = await db.execute(select(User).where(User.id == user_id))
+        user = res.scalar_one_or_none()
+        if user:
+            if user.role == UserRole.passenger and user.auth_status == AuthStatus.pending:
+                user.auth_status = AuthStatus.approved
+                await db.commit()
+            elif user.role == UserRole.driver and user.auth_status == AuthStatus.pending:
                 user.auth_status = AuthStatus.persona_in_progress
                 await db.commit()
-        except Exception:
-            pass
+    except Exception:
+        pass
+    if result.get("role") == UserRole.driver.value:
         kyc_url = "/verify"  # frontend Sumsub WebSDK page
 
     return WAAuthPollResponse(
@@ -212,9 +216,14 @@ async def verify_otp_and_login(
                 ip_address=request.client.host if request.client else None)
     await db.commit()
 
-    # ── Sumsub KYC: guide driver to verification page ──
+    # ── Role-based post-login logic ──
     kyc_url: str | None = None
-    if user.role == UserRole.driver:
+    if user.role == UserRole.passenger:
+        # Passengers don't need KYC — auto-approve on first login
+        if user.auth_status == AuthStatus.pending:
+            user.auth_status = AuthStatus.approved
+            await db.commit()
+    elif user.role == UserRole.driver:
         if user.auth_status == AuthStatus.pending:
             user.auth_status = AuthStatus.persona_in_progress
             await db.commit()

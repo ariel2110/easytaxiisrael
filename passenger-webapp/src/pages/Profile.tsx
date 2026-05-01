@@ -185,11 +185,11 @@ export default function Profile() {
             <div style={{ fontWeight: 700, marginBottom: '10px', fontSize: '.9rem' }}>סטטוס חשבון</div>
             <div className="prf-row">
               <span style={{ color: '#64748B' }}>תפקיד</span>
-              <span>🧑‍💼 נוסע</span>
+              <span>{user.role === 'driver' ? '🚗 נהג' : user.role === 'admin' ? '🔑 מנהל' : '🧑‍💼 נוסע'}</span>
             </div>
             <div className="prf-row">
               <span style={{ color: '#64748B' }}>סטטוס</span>
-              <span>{user.auth_status === 'approved' ? '✅ מאושר' : '⏳ ממתין'}</span>
+              <span>{user.auth_status === 'approved' ? '✅ מאושר' : user.auth_status === 'persona_completed' ? '⏳ ממתין לאישור' : user.auth_status === 'persona_in_progress' ? '📋 בתהליך אימות' : '⏳ ממתין'}</span>
             </div>
           </div>
 

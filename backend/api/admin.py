@@ -75,6 +75,7 @@ class PlatformStats(BaseModel):
     pending_rides: int
     total_revenue: float
     total_payments: int
+    pending_approvals: int = 0
 
 
 class AuditLogRead(BaseModel):
@@ -301,6 +302,15 @@ async def platform_stats(
         )
     )
 
+    # Pending approvals (drivers not yet approved)
+    pending_approvals_r = await db.execute(
+        select(func.count(User.id)).where(
+            User.role == UserRole.driver,
+            User.auth_status.notin_([AuthStatus.approved]),
+            User.is_active.is_(True),
+        )
+    )
+
     # Ride counts
     ride_counts = await db.execute(
         select(Ride.status, func.count(Ride.id)).group_by(Ride.status)
@@ -328,7 +338,92 @@ async def platform_stats(
         pending_rides=status_count.get("pending", 0),
         total_revenue=revenue,
         total_payments=total_payments_r.scalar() or 0,
+        pending_approvals=pending_approvals_r.scalar() or 0,
     )
+
+
+# ---------------------------------------------------------------------------
+# Pending approvals list
+# ---------------------------------------------------------------------------
+
+@router.get("/pending-approvals", summary="List drivers pending approval")
+async def list_pending_approvals(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(_admin),
+) -> dict:
+    """Return all drivers not yet approved, enriched with Sumsub data."""
+    from models.sumsub import SumsubApplicant
+    from security.encryption import decrypt_field
+    from sqlalchemy import text as _text
+    import json as _json
+
+    # Use raw SQL to avoid ORM bulk-decrypt crashing on rows with stale keys
+    raw = await db.execute(_text("""
+        SELECT id, phone, full_name, driver_type, auth_status, is_active, created_at
+        FROM users
+        WHERE role = 'driver'
+          AND auth_status NOT IN ('approved')
+          AND is_active = true
+        ORDER BY created_at DESC
+    """))
+    rows = raw.mappings().all()
+
+    STATUS_LABEL = {
+        "pending": "⏳ ממתין לאימות",
+        "whatsapp_verified": "📱 וואטסאפ אומת",
+        "persona_in_progress": "🔄 KYC בתהליך",
+        "persona_completed": "✅ KYC הושלם — ממתין לאישור",
+        "rejected": "❌ נדחה",
+        "on_hold": "⏸️ בהמתנה",
+    }
+
+    def _safe_decrypt(val: str | None) -> str | None:
+        if not val:
+            return None
+        try:
+            return decrypt_field(val)
+        except Exception:
+            return None  # corrupted / old-key ciphertext
+
+    # Build items list with safe per-row decryption
+    items_raw = []
+    for row in rows:
+        uid = str(row["id"])
+        auth_status = row["auth_status"] or "pending"
+        items_raw.append({
+            "id": uid,
+            "phone": _safe_decrypt(row["phone"]),
+            "full_name": row["full_name"],  # plain String column, not encrypted
+            "driver_type": row["driver_type"],
+            "auth_status": auth_status,
+            "auth_status_label": STATUS_LABEL.get(auth_status, auth_status),
+            "is_active": row["is_active"],
+            "created_at": row["created_at"].isoformat(),
+        })
+
+    # Load latest sumsub record per driver
+    driver_ids = [r["id"] for r in items_raw]
+    sumsub_rows: dict[str, dict] = {}
+    if driver_ids:
+        sa_result = await db.execute(
+            select(SumsubApplicant)
+            .where(SumsubApplicant.driver_id.in_(driver_ids))
+            .order_by(SumsubApplicant.updated_at.desc())
+        )
+        for row in sa_result.scalars().all():
+            key = str(row.driver_id)
+            if key not in sumsub_rows:
+                sumsub_rows[key] = {
+                    "sumsub_id": row.sumsub_applicant_id,
+                    "level": row.level_name,
+                    "sumsub_status": row.status.value,
+                    "review_result": row.review_result,
+                    "reject_labels": _json.loads(row.reject_labels) if row.reject_labels else [],
+                    "sumsub_updated_at": row.updated_at.isoformat(),
+                }
+
+    items = [{**item, **sumsub_rows.get(item["id"], {})} for item in items_raw]
+    return {"total": len(items), "items": items}
 
 
 # ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@ import DailyReport from './pages/DailyReport'
 import Handbook from './pages/Handbook'
 import DemoReport from './pages/DemoReport'
 import Leads from './pages/Leads'
+import PendingApprovals from './pages/PendingApprovals'
 
 function AdminLayout() {
   const { user, loading, logout } = useAuth()
@@ -54,6 +55,7 @@ function AdminLayout() {
             <Route path="whatsapp" element={<WhatsApp />} />
             <Route path="demo" element={<DemoReport />} />
             <Route path="leads" element={<Leads />} />
+            <Route path="pending" element={<PendingApprovals />} />
             <Route path="*" element={<Navigate to="/admin/" replace />} />
           </Routes>
         </div>
