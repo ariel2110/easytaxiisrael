@@ -5,13 +5,20 @@ Endpoint:  POST /webhooks/greeninvoice
 Auth:      HMAC-SHA256 of raw body using GREENINVOICE_WEBHOOK_SECRET,
            sent by Green Invoice in the header:  X-Greeninvoice-Signature
 
-Events we handle:
-  document.add       — document created (receipt / tax-invoice)
-  document.update    — document status changed
-  payment.add        — payment recorded against a document
+Events handled:
+  document/created        — new document (receipt / tax-invoice / credit-note)
+  client/created          — new client added
+  supplier/created        — new supplier added
+  payment/received        — payment recorded against a document
+  sale-pages/page-contacted  — lead from sale page (contact form)
+  sale-pages/order-paid      — paid order from sale page
+  expense-draft/parsed    — AI parsed an expense draft from email/file
+  expense-draft/declined  — expense draft was declined
+  expense/file-updated    — file attached to an expense changed
+  file/infected           — uploaded file flagged as malware (drop it)
 
-Green Invoice signs with:  HMAC-SHA256( raw_body, webhook_secret )
-Header value format:       sha256=<hex_digest>
+  Legacy dot-notation aliases (just in case):
+  document.add / document.update / payment.add
 """
 
 import hashlib
@@ -30,12 +37,10 @@ def _verify_signature(raw_body: bytes, header: str | None) -> bool:
     """Return True if the HMAC header matches the expected digest."""
     secret = settings.GREENINVOICE_WEBHOOK_SECRET
     if not secret:
-        # Webhook secret not configured — skip verification (dev mode)
         log.warning("GREENINVOICE_WEBHOOK_SECRET not set; skipping signature check")
         return True
     if not header:
         return False
-    # Header is expected as: "sha256=<hex>"
     prefix = "sha256="
     if not header.startswith(prefix):
         return False
@@ -58,37 +63,102 @@ async def greeninvoice_webhook(request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
+    # Green Invoice sends event as e.g. "document/created"
     event = payload.get("event") or payload.get("type") or "unknown"
-    doc   = payload.get("data", {})
+    data  = payload.get("data", {})
 
-    log.info("Green Invoice webhook: event=%s id=%s", event, doc.get("id", "—"))
+    log.info("Green Invoice webhook: event=%s", event)
 
-    # ── document.add ─────────────────────────────────────────────────────────
-    if event in ("document.add", "document.create"):
-        doc_type  = doc.get("type")
-        doc_number = doc.get("number")
-        doc_url   = doc.get("url") or doc.get("documentUrl")
-        client    = doc.get("client", {})
+    # ── document/created ─────────────────────────────────────────────────────
+    if event in ("document/created", "document.add", "document.create"):
+        doc_type   = data.get("type")
+        doc_number = data.get("number")
+        doc_url    = data.get("url") or data.get("documentUrl")
+        client     = data.get("client", {})
+        amount     = data.get("amount") or data.get("sum")
         log.info(
-            "New document: type=%s number=%s client=%s url=%s",
-            doc_type, doc_number, client.get("name"), doc_url,
+            "New document: type=%s number=%s client=%s amount=%s url=%s",
+            doc_type, doc_number, client.get("name"), amount, doc_url,
         )
-        # TODO: store doc_url against the ride/passenger for display in wallet
+        # TODO: persist doc_url on the ride record so the passenger can view it
 
-    # ── document.update ──────────────────────────────────────────────────────
+    # ── client/created ───────────────────────────────────────────────────────
+    elif event == "client/created":
+        client_id   = data.get("id")
+        client_name = data.get("name")
+        log.info("New client created: id=%s name=%s", client_id, client_name)
+
+    # ── supplier/created ─────────────────────────────────────────────────────
+    elif event == "supplier/created":
+        supplier_id   = data.get("id")
+        supplier_name = data.get("name")
+        log.info("New supplier created: id=%s name=%s", supplier_id, supplier_name)
+
+    # ── payment/received ─────────────────────────────────────────────────────
+    elif event in ("payment/received", "payment.add", "payment.create"):
+        amount   = data.get("amount") or data.get("sum")
+        currency = data.get("currency", "ILS")
+        doc_id   = data.get("documentId") or data.get("document", {}).get("id")
+        log.info("Payment received: amount=%s %s for document=%s", amount, currency, doc_id)
+
+    # ── sale-pages/page-contacted ────────────────────────────────────────────
+    elif event == "sale-pages/page-contacted":
+        contact_name  = data.get("name")
+        contact_email = data.get("email")
+        contact_phone = data.get("phone")
+        page_name     = data.get("pageName") or data.get("page", {}).get("name")
+        log.info(
+            "Sale page contact: name=%s email=%s phone=%s page=%s",
+            contact_name, contact_email, contact_phone, page_name,
+        )
+
+    # ── sale-pages/order-paid ────────────────────────────────────────────────
+    elif event == "sale-pages/order-paid":
+        order_id  = data.get("id")
+        amount    = data.get("amount") or data.get("sum")
+        currency  = data.get("currency", "ILS")
+        buyer     = data.get("client", {})
+        log.info(
+            "Sale page order paid: order=%s amount=%s %s buyer=%s",
+            order_id, amount, currency, buyer.get("name"),
+        )
+
+    # ── expense-draft/parsed ─────────────────────────────────────────────────
+    elif event == "expense-draft/parsed":
+        draft_id  = data.get("id")
+        vendor    = data.get("description") or data.get("supplierName")
+        amount    = data.get("amount") or data.get("sum")
+        log.info("Expense draft parsed: id=%s vendor=%s amount=%s", draft_id, vendor, amount)
+
+    # ── expense-draft/declined ───────────────────────────────────────────────
+    elif event == "expense-draft/declined":
+        draft_id = data.get("id")
+        reason   = data.get("reason") or data.get("description")
+        log.info("Expense draft declined: id=%s reason=%s", draft_id, reason)
+
+    # ── expense/file-updated ─────────────────────────────────────────────────
+    elif event == "expense/file-updated":
+        expense_id = data.get("id")
+        file_url   = data.get("fileUrl") or data.get("url")
+        log.info("Expense file updated: id=%s url=%s", expense_id, file_url)
+
+    # ── file/infected ────────────────────────────────────────────────────────
+    elif event == "file/infected":
+        file_name = data.get("fileName") or data.get("name")
+        file_id   = data.get("id")
+        log.error(
+            "SECURITY ALERT — infected file detected by Green Invoice: id=%s name=%s",
+            file_id, file_name,
+        )
+        # Do NOT process the file — log only
+
+    # ── document.update (legacy) ─────────────────────────────────────────────
     elif event in ("document.update", "document.change"):
-        doc_id     = doc.get("id")
-        new_status = doc.get("status") or doc.get("state")
+        doc_id     = data.get("id")
+        new_status = data.get("status") or data.get("state")
         log.info("Document updated: id=%s new_status=%s", doc_id, new_status)
 
-    # ── payment.add ──────────────────────────────────────────────────────────
-    elif event in ("payment.add", "payment.create"):
-        amount   = doc.get("amount") or doc.get("sum")
-        currency = doc.get("currency", "ILS")
-        log.info("Payment recorded: amount=%s %s", amount, currency)
-
     else:
-        log.info("Unhandled Green Invoice event: %s", event)
+        log.info("Unhandled Green Invoice event: %s  data_keys=%s", event, list(data.keys()))
 
-    # Green Invoice expects HTTP 200 to confirm delivery
     return {"received": True, "event": event}
