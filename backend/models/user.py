@@ -61,6 +61,12 @@ class User(Base):
     email: Mapped[str | None] = mapped_column(String(254), nullable=True)
     # Driver vehicle registration plate — verified against data.gov.il
     vehicle_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Payment profile — personal or business (affects invoice generation)
+    payment_profile: Mapped[str] = mapped_column(String(20), nullable=False, default="personal")
+    # Business profile details (used when payment_profile == "business")
+    business_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    business_tax_id: Mapped[str | None] = mapped_column(String(20), nullable=True)   # ח.פ / ע.מ
+    business_email: Mapped[str | None] = mapped_column(String(254), nullable=True)
     # FCM / APNs device token — updated by client on login
     device_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Terms of Service acceptance timestamp — required before first ride

@@ -70,7 +70,21 @@ class Settings(BaseSettings):
     PERSONA_API_VERSION: str = "2025-12-08"
     DRIVER_APP_URL: str = "https://driver.easytaxiisrael.com"  # used as redirect-uri after Persona KYC
 
-    # ── Multi-Agent System — LLM API keys (all optional; agents fall back gracefully) ──
+    # ── Grow — Israeli payment gateway (grow.business) ──────────────────────
+    # Obtain from: grow.business merchant dashboard → API settings
+    GROW_API_KEY: str = ""
+    GROW_API_SECRET: str = ""
+    GROW_API_URL: str = "https://api.grow.business/v1"
+    GROW_SANDBOX: bool = True   # set False for production
+
+    # ── Green Invoice / Morning (greeninvoice.co.il) ─────────────────────────
+    # Obtain from: greeninvoice.co.il → Settings → API → Generate credentials
+    GREENINVOICE_API_ID: str = ""
+    GREENINVOICE_API_SECRET: str = ""
+    GREENINVOICE_API_URL: str = "https://api.greeninvoice.co.il/api/v1"
+    # Business details for invoice sender (your company)
+    GREENINVOICE_BUSINESS_NAME: str = "EasyTaxi Israel"
+    GREENINVOICE_BUSINESS_TAX_ID: str = ""    # ח.פ שלך
     # Onboarding + Support agents (GPT-4o Vision / GPT-4o mini)
     OPENAI_API_KEY: str | None = None
     # Compliance & Legal agent (Claude 3.5 Sonnet)

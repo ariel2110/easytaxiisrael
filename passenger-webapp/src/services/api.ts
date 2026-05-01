@@ -193,4 +193,43 @@ export const api = {
   ai: {
     intelligence: () => request<{ surge_multiplier: string; demand_level: string }>('GET', '/ai/intelligence'),
   },
+  wallet: {
+    get: () => request<{
+      wallet: { id: string; passenger_id: string; balance: string; updated_at: string }
+      entries: Array<{
+        id: string; entry_type: 'credit' | 'debit'; amount: string;
+        balance_after: string; description: string | null; ride_id: string | null;
+        grow_transaction_id: string | null; created_at: string
+      }>
+      payment_profile: {
+        payment_profile: 'personal' | 'business'
+        business_name: string | null
+        business_tax_id: string | null
+        business_email: string | null
+      }
+    }>('GET', '/passenger/wallet'),
+    topup: (amount_ils: number, payment_method_id: string) =>
+      request<{ id: string; balance: string }>('POST', '/passenger/wallet/topup', { amount_ils, payment_method_id }),
+    listMethods: () => request<Array<{
+      id: string; card_last4: string; card_brand: string;
+      card_expiry: string | null; is_default: boolean; created_at: string
+    }>>('GET', '/passenger/payment-methods'),
+    addMethod: (grow_token: string, card_last4: string, card_brand: string, card_expiry?: string) =>
+      request<{ id: string; card_last4: string; card_brand: string; is_default: boolean }>('POST', '/passenger/payment-methods', { grow_token, card_last4, card_brand, card_expiry }),
+    setDefault: (id: string) => request<{ id: string }>('PUT', `/passenger/payment-methods/${id}/default`, {}),
+    removeMethod: (id: string) => fetch(`/api/passenger/payment-methods/${id}`, {
+      method: 'DELETE', headers: { Authorization: `Bearer ${getToken()}` }
+    }).then(r => { if (!r.ok) throw new Error('שגיאה במחיקת כרטיס') }),
+    getProfile: () => request<{
+      payment_profile: 'personal' | 'business'
+      business_name: string | null; business_tax_id: string | null; business_email: string | null
+    }>('GET', '/passenger/payment-profile'),
+    updateProfile: (data: {
+      payment_profile: 'personal' | 'business'
+      business_name?: string; business_tax_id?: string; business_email?: string
+    }) => request<{
+      payment_profile: 'personal' | 'business'
+      business_name: string | null; business_tax_id: string | null; business_email: string | null
+    }>('PATCH', '/passenger/payment-profile', data),
+  },
 }

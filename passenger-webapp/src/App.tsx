@@ -13,6 +13,7 @@ import AdminPanel from './pages/AdminPanel'
 import FAQ from './pages/FAQ'
 import Profile from './pages/Profile'
 import KYCVerification from './pages/KYCVerification'
+import Wallet from './pages/Wallet'
 import InstallBanner from './components/InstallBanner'
 
 const Loader = () => (
@@ -59,6 +60,7 @@ export default function App() {
         {/* Passenger app (auth required) */}
         <Route path="/app" element={<RequireAuth><RequestRide /></RequireAuth>} />
         <Route path="/app/profile" element={<RequireAuth><Profile /></RequireAuth>} />
+        <Route path="/app/wallet" element={<RequireAuth><Wallet /></RequireAuth>} />
         <Route path="/ride/:rideId" element={<RequireAuth><ActiveRide /></RequireAuth>} />
 
         {/* Admin panel */}

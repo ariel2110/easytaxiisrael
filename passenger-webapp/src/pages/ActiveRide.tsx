@@ -5,6 +5,7 @@ import { RideWebSocket } from '../services/websocket'
 import type { Ride, FareEstimate, LocationPayload } from '../types'
 import RideMap from '../components/RideMap'
 import RatingModal from '../components/RatingModal'
+import SafetyCenterOverlay from '../components/SafetyCenterOverlay'
 
 const STATUS_LABEL: Record<string, string> = {
   pending:     '⏳ Finding a driver…',
@@ -69,6 +70,14 @@ export default function ActiveRide() {
 
   return (
     <div className="page">
+      {/* Safety overlay — visible during active ride */}
+      {rideId && (ride?.status === 'in_progress' || ride?.status === 'assigned' || ride?.status === 'accepted') && (
+        <SafetyCenterOverlay
+          rideId={rideId}
+          driverName={(ride as any)?.driver_name ?? null}
+        />
+      )}
+
       {/* Rating modal — shown once on ride completion */}
       {showRating && rideId && (
         <RatingModal

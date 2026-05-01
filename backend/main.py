@@ -13,6 +13,7 @@ from api.compliance import router as compliance_router
 from api.growth import router as growth_router
 from api.health import router as health_router
 from api.legal import router as legal_router, tos_router
+from api.passenger_wallet import router as passenger_wallet_router
 from api.payments import router as payments_router
 from api.persona import router as persona_router
 from api.rideshare import router as rideshare_router
@@ -38,6 +39,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import models.growth      # noqa: F401
     import models.legal       # noqa: F401
     import models.location    # noqa: F401
+    import models.passenger_wallet  # noqa: F401
     import models.payment     # noqa: F401
     import models.persona     # noqa: F401
     import models.rating      # noqa: F401
@@ -97,6 +99,7 @@ app.include_router(auth_router)
 app.include_router(rides_router)
 app.include_router(tracking_router)
 app.include_router(payments_router)
+app.include_router(passenger_wallet_router)
 app.include_router(ai_router)
 app.include_router(ai_agents_router)
 app.include_router(compliance_router)

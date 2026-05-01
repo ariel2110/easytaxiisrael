@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth';
 import { api } from '../services/api';
 import SurgeIndicator from '../components/SurgeIndicator';
 import RideMap from '../components/RideMap';
+import SmartWalletSelector from '../components/SmartWalletSelector';
 // Default to Tel Aviv center
 const DEFAULT_COORDS = { lat: 32.0853, lng: 34.7818 };
 const TOS_KEY = 'easytaxi_tos_v1';
@@ -115,6 +116,7 @@ export default function RequestRide() {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(null);
     const [locating, setLocating] = useState(false);
+    const [paymentMode, setPaymentMode] = useState('personal');
     // Detect user location + reverse geocode for pickup address
     useEffect(() => {
         if (!navigator.geolocation)
@@ -247,7 +249,7 @@ export default function RequestRide() {
                             borderRadius: 14,
                             direction: 'rtl',
                         }, children: _jsxs("label", { style: { display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }, children: [_jsx("input", { type: "checkbox", onChange: e => { if (e.target.checked)
-                                        acceptTos(); }, style: { marginTop: 3, width: 18, height: 18, accentColor: '#F59E0B', flexShrink: 0 } }), _jsxs("div", { children: [_jsx("div", { style: { fontWeight: 700, color: '#F59E0B', fontSize: '.88rem', marginBottom: 2 }, children: "\u05E7\u05E8\u05D0\u05EA\u05D9 \u05D5\u05DE\u05E1\u05DB\u05D9\u05DD \u05DC\u05EA\u05E0\u05D0\u05D9 \u05D4\u05E9\u05D9\u05DE\u05D5\u05E9" }), _jsxs("div", { style: { fontSize: '.75rem', color: '#94A3B8', lineHeight: 1.5 }, children: ["\u05E0\u05D3\u05E8\u05E9\u05EA \u05D4\u05E1\u05DB\u05DE\u05D4 \u05DC\u05E4\u05E0\u05D9 \u05D4\u05D6\u05DE\u05E0\u05EA \u05E0\u05E1\u05D9\u05E2\u05D4.", ' ', _jsx("span", { style: { textDecoration: 'underline', cursor: 'pointer' }, onClick: e => { e.preventDefault(); setShowTos(true); }, children: "\u05E7\u05E8\u05D0 \u05D0\u05EA \u05D4\u05EA\u05E0\u05D0\u05D9\u05DD" })] })] })] }) })), _jsx("button", { className: "btn btn-primary", style: {
+                                        acceptTos(); }, style: { marginTop: 3, width: 18, height: 18, accentColor: '#F59E0B', flexShrink: 0 } }), _jsxs("div", { children: [_jsx("div", { style: { fontWeight: 700, color: '#F59E0B', fontSize: '.88rem', marginBottom: 2 }, children: "\u05E7\u05E8\u05D0\u05EA\u05D9 \u05D5\u05DE\u05E1\u05DB\u05D9\u05DD \u05DC\u05EA\u05E0\u05D0\u05D9 \u05D4\u05E9\u05D9\u05DE\u05D5\u05E9" }), _jsxs("div", { style: { fontSize: '.75rem', color: '#94A3B8', lineHeight: 1.5 }, children: ["\u05E0\u05D3\u05E8\u05E9\u05EA \u05D4\u05E1\u05DB\u05DE\u05D4 \u05DC\u05E4\u05E0\u05D9 \u05D4\u05D6\u05DE\u05E0\u05EA \u05E0\u05E1\u05D9\u05E2\u05D4.", ' ', _jsx("span", { style: { textDecoration: 'underline', cursor: 'pointer' }, onClick: e => { e.preventDefault(); setShowTos(true); }, children: "\u05E7\u05E8\u05D0 \u05D0\u05EA \u05D4\u05EA\u05E0\u05D0\u05D9\u05DD" })] })] })] }) })), _jsx(SmartWalletSelector, { value: paymentMode, onChange: setPaymentMode }), _jsx("button", { className: "btn btn-primary", style: {
                             width: '100%', padding: '1rem', fontSize: '1.1rem', fontWeight: 800,
                             borderRadius: 'var(--radius-lg)',
                             opacity: tosAccepted ? 1 : 0.35,

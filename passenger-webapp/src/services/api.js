@@ -112,4 +112,17 @@ export const api = {
     ai: {
         intelligence: () => request('GET', '/ai/intelligence'),
     },
+    wallet: {
+        get: () => request('GET', '/passenger/wallet'),
+        topup: (amount_ils, payment_method_id) => request('POST', '/passenger/wallet/topup', { amount_ils, payment_method_id }),
+        listMethods: () => request('GET', '/passenger/payment-methods'),
+        addMethod: (grow_token, card_last4, card_brand, card_expiry) => request('POST', '/passenger/payment-methods', { grow_token, card_last4, card_brand, card_expiry }),
+        setDefault: (id) => request('PUT', `/passenger/payment-methods/${id}/default`, {}),
+        removeMethod: (id) => fetch(`/api/passenger/payment-methods/${id}`, {
+            method: 'DELETE', headers: { Authorization: `Bearer ${getToken()}` }
+        }).then(r => { if (!r.ok)
+            throw new Error('שגיאה במחיקת כרטיס'); }),
+        getProfile: () => request('GET', '/passenger/payment-profile'),
+        updateProfile: (data) => request('PATCH', '/passenger/payment-profile', data),
+    },
 };

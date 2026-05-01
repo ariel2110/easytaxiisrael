@@ -5,6 +5,7 @@ import { api } from '../services/api'
 import type { FareEstimate, RideRequest } from '../types'
 import SurgeIndicator from '../components/SurgeIndicator'
 import RideMap from '../components/RideMap'
+import SmartWalletSelector, { type PaymentMode } from '../components/SmartWalletSelector'
 
 // Default to Tel Aviv center
 const DEFAULT_COORDS = { lat: 32.0853, lng: 34.7818 }
@@ -226,6 +227,7 @@ export default function RequestRide() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [locating, setLocating] = useState(false)
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>('personal')
 
   // Detect user location + reverse geocode for pickup address
   useEffect(() => {
@@ -543,6 +545,9 @@ export default function RequestRide() {
             </label>
           </div>
         )}
+
+        {/* Payment selector */}
+        <SmartWalletSelector value={paymentMode} onChange={setPaymentMode} />
 
         {/* Main CTA */}
         <button

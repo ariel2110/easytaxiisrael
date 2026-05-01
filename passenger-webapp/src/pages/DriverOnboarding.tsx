@@ -51,6 +51,7 @@ const CSS = `
 .do-doc{padding:16px 12px;border-radius:14px;cursor:pointer;text-align:center;transition:all .2s;border:2px solid;}
 .do-doc.idle{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.09);}
 .do-doc.idle:hover{background:rgba(37,99,235,.07);border-color:rgba(96,165,250,.3);}
+.do-doc.uploading{background:rgba(96,165,250,.06);border-color:rgba(96,165,250,.25);}
 .do-doc.scanning{background:rgba(253,224,71,.06);border-color:rgba(253,224,71,.3);}
 .do-doc.verified{background:rgba(34,197,94,.07);border-color:rgba(34,197,94,.3);cursor:default;}
 .do-doc.failed{background:rgba(239,68,68,.07);border-color:rgba(239,68,68,.3);}
@@ -91,10 +92,36 @@ const CSS = `
 .do-btn-done:hover{transform:translateY(-2px);box-shadow:0 7px 24px rgba(34,197,94,.45);}
 /* Error */
 .do-err{margin-top:14px;padding:12px 14px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.28);border-radius:10px;color:#FCA5A5;font-size:.85rem;}
+/* Fleet type selector */
+.do-fleet-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
+.do-fleet-card{
+  padding:24px 16px;border-radius:18px;cursor:pointer;
+  border:2px solid rgba(255,255,255,.09);background:rgba(255,255,255,.04);
+  text-align:center;transition:all .22s;outline:none;font-family:inherit;
+  color:var(--white);
+}
+.do-fleet-card:hover{background:rgba(37,99,235,.08);border-color:rgba(96,165,250,.25);}
+.do-fleet-card.selected{
+  background:rgba(253,224,71,.08);border-color:var(--gold);
+  box-shadow:0 4px 18px rgba(253,224,71,.12);
+}
+.do-fleet-ico{font-size:2.2rem;margin-bottom:10px;}
+.do-fleet-name{font-size:.95rem;font-weight:800;margin-bottom:5px;}
+.do-fleet-sub{font-size:.72rem;color:var(--muted);line-height:1.5;}
+.do-fleet-card.selected .do-fleet-name{color:var(--gold);}
+/* AI scan badge */
+.do-ai-scan{
+  display:flex;align-items:center;gap:6px;
+  background:rgba(253,224,71,.07);border:1px solid rgba(253,224,71,.2);
+  border-radius:20px;padding:3px 10px;font-size:.68rem;color:var(--gold);
+  animation:doAiPulse 1.4s ease-in-out infinite;
+}
+@keyframes doAiPulse{0%,100%{opacity:1;}50%{opacity:.55;}}
+.do-ai-dot{width:6px;height:6px;border-radius:50%;background:var(--gold);animation:doAiPulse 1.4s ease-in-out infinite;}
 `
 
 type DriverType = 'taxi' | 'rideshare'
-type DocStatus = 'idle' | 'scanning' | 'verified' | 'failed'
+type DocStatus = 'idle' | 'uploading' | 'scanning' | 'verified' | 'failed'
 
 interface DocField { id: string; label: string; icon: string; taxiOnly?: boolean }
 
@@ -108,6 +135,7 @@ const DOCS: DocField[] = [
 ]
 
 const STEPS = [
+  { step: 0, label: 'סוג', icon: '🚕' },
   { step: 1, label: 'פרטים', icon: '👤' },
   { step: 2, label: 'מסמכים', icon: '📋' },
   { step: 3, label: 'רכב', icon: '🚗' },
@@ -117,9 +145,11 @@ const STEPS = [
 export default function DriverOnboarding() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const driverType: DriverType = (params.get('role') === 'taxi') ? 'taxi' : 'rideshare'
 
-  const [step, setStep]             = useState(1)
+  const [step, setStep]             = useState(0)
+  const [driverType, setDriverType] = useState<DriverType>(
+    (params.get('role') === 'taxi') ? 'taxi' : 'rideshare'
+  )
   const [docStatus, setDocStatus]   = useState<Record<string, DocStatus>>({})
   const [phone, setPhone]           = useState('')
   const [name, setName]             = useState('')
@@ -143,14 +173,19 @@ export default function DriverOnboarding() {
   const allVerified   = visibleDocs.every(d => docStatus[d.id] === 'verified')
 
   function simulateScan(id: string) {
-    if (docStatus[id] === 'scanning' || docStatus[id] === 'verified') return
-    setDocStatus(p => ({ ...p, [id]: 'scanning' }))
+    const cur = docStatus[id]
+    if (cur === 'uploading' || cur === 'scanning' || cur === 'verified') return
+    setDocStatus(p => ({ ...p, [id]: 'uploading' }))
     setTimeout(() => {
-      setDocStatus(p => ({ ...p, [id]: Math.random() > 0.08 ? 'verified' : 'failed' }))
-    }, 2000 + Math.random() * 2000)
+      setDocStatus(p => ({ ...p, [id]: 'scanning' }))
+      setTimeout(() => {
+        setDocStatus(p => ({ ...p, [id]: Math.random() > 0.08 ? 'verified' : 'failed' }))
+      }, 2000 + Math.random() * 1500)
+    }, 600)
   }
 
   function canProceed() {
+    if (step === 0) return true   // fleet type always selected
     if (step === 1) return phone.trim().length >= 9 && name.trim().length >= 2
     if (step === 2) return kycUrl ? kycOpened : allVerified
     if (step === 3) return vehicleModel.trim().length >= 2 && vehicleYear.trim().length === 4
@@ -194,6 +229,35 @@ export default function DriverOnboarding() {
             </div>
           ))}
         </div>
+
+        {/* Step 0: Fleet type */}
+        {step === 0 && (
+          <div className="do-card">
+            <div className="do-card-title">🚕 בחר סוג נהיגה</div>
+            <div className="do-card-sub">בחר את סוג הרישיון שברשותך. לא ניתן לשנות לאחר ההרשמה.</div>
+            <div className="do-fleet-grid">
+              <button
+                className={`do-fleet-card${driverType === 'taxi' ? ' selected' : ''}`}
+                onClick={() => setDriverType('taxi')}
+              >
+                <div className="do-fleet-ico">🚕</div>
+                <div className="do-fleet-name">מונית מורשית</div>
+                <div className="do-fleet-sub">כובע צהוב · רישיון מונית · מד-מרחק · גביית תשלום</div>
+              </button>
+              <button
+                className={`do-fleet-card${driverType === 'rideshare' ? ' selected' : ''}`}
+                onClick={() => setDriverType('rideshare')}
+              >
+                <div className="do-fleet-ico">🚗</div>
+                <div className="do-fleet-name">רכב פרטי</div>
+                <div className="do-fleet-sub">תיקון 142 · ללא רישיון מונית · העברה פרטית מורשה</div>
+              </button>
+            </div>
+            <div className="do-infobox">
+              ℹ️ <strong style={{ color: '#F1F5F9' }}>ההבדל:</strong> מונית מורשית נדרשת לרישיון ייעודי ומד-מרחק מאושר. רכב פרטי (תיקון 142) מאפשר הסעות ללא רישיון מונית בתנאי פעולה מסוימים.
+            </div>
+          </div>
+        )}
 
         {/* Step 1: Personal info */}
         {step === 1 && (
@@ -274,12 +338,15 @@ export default function DriverOnboarding() {
                     return (
                       <button key={doc.id} className={`do-doc ${st}`} onClick={() => simulateScan(doc.id)} disabled={st === 'verified'}>
                         <div className="do-doc-ico">
-                          {st === 'verified' ? '✅' : st === 'failed' ? '❌' : st === 'scanning' ? '⚙️' : doc.icon}
+                          {st === 'verified' ? '✅' : st === 'failed' ? '❌' : (st === 'scanning' || st === 'uploading') ? '⚙️' : doc.icon}
                         </div>
                         <div className={`do-doc-name ${st}`}>{doc.label}</div>
                         {st === 'scanning' && <div className="do-scanbar" />}
                         <div className="do-doc-hint">
-                          {st === 'idle' ? 'לחץ להעלאה' : st === 'scanning' ? 'סורק...' : st === 'verified' ? 'אומת ✓' : 'נסה שנית'}
+                          {st === 'idle' ? 'לחץ להעלאה' :
+                           st === 'uploading' ? 'מעלה...' :
+                           st === 'scanning' ? <span className="do-ai-scan"><span className="do-ai-dot"/>סוכן AI סורק מסמך...</span> :
+                           st === 'verified' ? 'אומת ✓' : 'נסה שנית'}
                         </div>
                       </button>
                     )
@@ -336,7 +403,7 @@ export default function DriverOnboarding() {
 
         {/* Navigation buttons */}
         <div className="do-navbtns">
-          {step > 1 && step < 4 && (
+          {step > 0 && step < 4 && (
             <button className="do-btn-back" onClick={() => { setStep(s => s - 1); setError(null) }}>← אחורה</button>
           )}
           {step < 4 && (
