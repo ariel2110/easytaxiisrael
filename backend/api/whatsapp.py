@@ -5,7 +5,7 @@ Also handles incoming messages via Evolution API webhook, including WA auth flow
 
 import logging
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, Query, Request, Response
 
 from core.config import settings
 from core.dependencies import get_current_user
@@ -28,16 +28,27 @@ def _require_admin(current_user: User = Depends(get_current_user)) -> User:
 
 def _check_admin_key(x_admin_key: str | None = Header(default=None)) -> None:
     """Light auth for setup endpoints: requires the Evolution API key in X-Admin-Key header."""
-    if not x_admin_key or x_admin_key != settings.EVOLUTION_API_KEY:
+    valid_keys = {settings.EVOLUTION_API_KEY}
+    if not x_admin_key or x_admin_key not in valid_keys:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid admin key — pass X-Admin-Key header",
         )
 
 
-@router.get("/config", summary="Return Evolution API key for the setup page")
+@router.get("/config", summary="Return WhatsApp provider config for the setup page")
 async def get_whatsapp_config(_: User = Depends(_require_admin)) -> dict:
+    from services.whatsapp import _meta_enabled
+    if _meta_enabled():
+        return {
+            "provider": "meta",
+            "phone_number_id": settings.WHATSAPP_PHONE_NUMBER_ID,
+            "waba_id": settings.WHATSAPP_WABA_ID,
+            "api_version": settings.WHATSAPP_API_VERSION,
+            "webhook_url": "https://easytaxiisrael.com/api/whatsapp/webhook",
+        }
     return {
+        "provider": "evolution",
         "evolution_url": "/evolution",
         "instance": settings.EVOLUTION_INSTANCE,
         "api_key": settings.EVOLUTION_API_KEY,
@@ -49,25 +60,27 @@ async def get_whatsapp_config(_: User = Depends(_require_admin)) -> dict:
 @router.get("/status", summary="Get WhatsApp connection status and connected phone")
 async def get_whatsapp_status(_: None = Depends(_check_admin_key)) -> dict:
     from services import whatsapp as wa
+    from services.whatsapp import _meta_enabled
     from core.redis import redis_client
     info = await wa.get_instance_info()
     state = await wa.get_connection_state()
+    provider = "meta" if _meta_enabled() else "evolution"
     owner_raw = (info or {}).get("owner", "")
     owner_phone = owner_raw.replace("@s.whatsapp.net", "") if owner_raw else None
-    # Fetch webhook config from dedicated endpoint
     configured_webhook = await wa.get_webhook_url()
-    # Effective platform phone: Redis override takes priority over settings
     redis_override = await redis_client.get("whatsapp:platform_phone")
     effective_platform_phone = redis_override if redis_override else settings.WHATSAPP_PLATFORM_PHONE
     return {
+        "provider": provider,
         "state": state,
         "owner_phone": owner_phone,
         "profile_name": (info or {}).get("profileName"),
+        "quality_rating": (info or {}).get("quality_rating"),
         "configured_webhook": configured_webhook,
-        "correct_webhook": "http://backend:8000/whatsapp/webhook",
+        "correct_webhook": "https://easytaxiisrael.com/api/whatsapp/webhook",
         "platform_phone": effective_platform_phone,
         "platform_phone_source": "redis" if redis_override else "settings",
-        "instance": settings.EVOLUTION_INSTANCE,
+        "instance": settings.EVOLUTION_INSTANCE if provider == "evolution" else None,
     }
 
 
@@ -303,26 +316,114 @@ async def _handle_support_message(phone: str, text: str, reply_jid: str | None =
         await whatsapp_svc.send_text(phone, reply)
 
 
+# ── Meta Cloud API webhook verification ─────────────────────────────────────
 
-@router.post("/webhook", summary="Receive incoming WhatsApp events from Evolution API")
+@router.get(
+    "/webhook",
+    summary="Meta Cloud API webhook verification challenge",
+    include_in_schema=False,
+)
+async def meta_webhook_verify(
+    hub_mode: str | None = Query(default=None, alias="hub.mode"),
+    hub_verify_token: str | None = Query(default=None, alias="hub.verify_token"),
+    hub_challenge: str | None = Query(default=None, alias="hub.challenge"),
+) -> Response:
+    """
+    Meta calls GET /webhook?hub.mode=subscribe&hub.verify_token=...&hub.challenge=...
+    We must return the challenge value as plain text to verify the endpoint.
+    """
+    if (
+        hub_mode == "subscribe"
+        and hub_verify_token == settings.WHATSAPP_WEBHOOK_VERIFY_TOKEN
+        and hub_challenge
+    ):
+        logger.info("Meta webhook verified successfully")
+        return Response(content=hub_challenge, media_type="text/plain")
+    logger.warning(
+        "Meta webhook verification failed: mode=%s token_match=%s",
+        hub_mode,
+        hub_verify_token == settings.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
+    )
+    raise HTTPException(status_code=403, detail="Webhook verification failed")
+
+
+@router.post("/webhook", summary="Receive incoming WhatsApp events (Meta Cloud API or Evolution API)")
 async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> dict:
     """
-    Evolution API calls this endpoint for every WhatsApp event.
-    Handles:
-      - WA auth messages: "🔐 EasyTaxi: אמת אותי | <token>"
-      - Connection updates (logged)
+    Handles incoming events from both providers.
+
+    Meta Cloud API payload structure:
+      {"object":"whatsapp_business_account","entry":[{"changes":[{"value":{...}}]}]}
+
+    Evolution API payload structure:
+      {"event":"MESSAGES_UPSERT","data":{...}}
     """
     try:
         payload = await request.json()
     except Exception:
         return {"status": "ok"}
 
+    # ── Detect provider by payload shape ──────────────────────────────────────
+    if payload.get("object") == "whatsapp_business_account":
+        return await _handle_meta_webhook(payload, db)
+
+    # Evolution API path (legacy)
+    return await _handle_evolution_webhook(payload, db)
+
+
+async def _handle_meta_webhook(payload: dict, db: AsyncSession) -> dict:
+    """
+    Process a Meta Cloud API webhook event.
+    Spec: https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/payload-examples
+    """
+    for entry in payload.get("entry", []):
+        for change in entry.get("changes", []):
+            value = change.get("value", {})
+            if change.get("field") != "messages":
+                continue
+
+            # Process each message
+            for msg in value.get("messages", []):
+                msg_id = msg.get("id")
+                from_phone = msg.get("from", "")  # digits only, no +
+
+                msg_type = msg.get("type", "")
+                if msg_type == "text":
+                    text = msg.get("text", {}).get("body", "")
+                elif msg_type == "interactive":
+                    # Button reply or list reply
+                    text = (
+                        msg.get("interactive", {}).get("button_reply", {}).get("id", "")
+                        or msg.get("interactive", {}).get("list_reply", {}).get("id", "")
+                    )
+                else:
+                    text = ""
+
+                if not text:
+                    continue
+
+                logger.info("📨 Meta WhatsApp | from=%s | text=%s", from_phone, text[:120])
+                print(f"[META-WH] from={from_phone} type={msg_type} text={repr(text[:200])}", flush=True)
+
+                is_auth = await _handle_auth_message(from_phone, text, db, msg_id)
+                if not is_auth:
+                    await _handle_support_message(from_phone, text, reply_jid=None)
+
+            # Process status updates (delivery receipts etc.) — just log
+            for status_item in value.get("statuses", []):
+                status_val = status_item.get("status")
+                msg_id_ref = status_item.get("id")
+                logger.debug("Meta message status: %s for msg=%s", status_val, msg_id_ref)
+
+    return {"status": "ok"}
+
+
+async def _handle_evolution_webhook(payload: dict, db: AsyncSession) -> dict:
+    """Process an Evolution API webhook event (legacy path)."""
     event = payload.get("event", "")
     data = payload.get("data", {})
-    print(f"[WH-RAW] event={repr(event)} data_keys={list(data.keys()) if isinstance(data, dict) else type(data).__name__}", flush=True)
-    print(f"[WH-FULL] payload_keys={list(payload.keys())} sender={repr(payload.get('sender'))} instance={repr(payload.get('instance'))}", flush=True)
+    print(f"[EVO-WH] event={repr(event)} data_keys={list(data.keys()) if isinstance(data, dict) else type(data).__name__}", flush=True)
 
-    # Evolution API v1.8+ uses UPPERCASE event names; normalise for compatibility
     event_lower = event.lower().replace("_", ".")
 
     if event_lower in ("messages.upsert",):

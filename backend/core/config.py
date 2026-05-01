@@ -40,13 +40,22 @@ class Settings(BaseSettings):
     # CORS — comma-separated list of allowed origins (production)
     CORS_ORIGINS: str = "https://easytaxiisrael.com,https://www.easytaxiisrael.com,https://driver.easytaxiisrael.com"
 
-    # WhatsApp (Evolution API)
-    EVOLUTION_URL: str = "http://evolution-api:8080"
-    EVOLUTION_API_KEY: str = "evolution_secret"
-    EVOLUTION_INSTANCE: str = "easytaxi"
+    # ── WhatsApp — Meta Cloud API (preferred) ───────────────────────────────
+    # Obtain from: Meta Business Manager → WhatsApp → API Setup
+    WHATSAPP_PHONE_NUMBER_ID: str = ""           # e.g. "123456789012345"
+    WHATSAPP_WABA_ID: str = ""                   # WhatsApp Business Account ID
+    WHATSAPP_ACCESS_TOKEN: str = ""              # System User permanent token
+    WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = "rideos-wa-verify"  # any secret string
+    WHATSAPP_API_VERSION: str = "v20.0"
     # Platform's own WhatsApp phone number (digits only, with country code, no +)
     # Users send auth messages TO this number.
     WHATSAPP_PLATFORM_PHONE: str = "972546363350"
+
+    # ── WhatsApp — Evolution API (fallback / legacy) ──────────────────────────
+    # Used when WHATSAPP_PHONE_NUMBER_ID is not configured.
+    EVOLUTION_URL: str = "http://evolution-api:8080"
+    EVOLUTION_API_KEY: str = "evolution_secret"
+    EVOLUTION_INSTANCE: str = "easytaxi"
 
     # Sumsub KYC (https://sumsub.com) — replaces Persona
     SUMSUB_APP_TOKEN: str = ""
