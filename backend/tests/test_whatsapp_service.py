@@ -47,8 +47,11 @@ class TestNormalizePhone:
 
 SEND_TEXT_URL = "http://evolution-api-test:8080/message/sendText/test-instance"
 
+_DISABLE_META = patch("services.whatsapp._meta_enabled", new=lambda: False)
+
 
 class TestSendText:
+    @_DISABLE_META
     @respx.mock
     async def test_returns_true_on_200(self):
         from services.whatsapp import send_text
@@ -59,6 +62,7 @@ class TestSendText:
         result = await send_text("0501234567", "שלום")
         assert result is True
 
+    @_DISABLE_META
     @respx.mock
     async def test_returns_true_on_201(self):
         from services.whatsapp import send_text
@@ -66,6 +70,7 @@ class TestSendText:
         respx.post(SEND_TEXT_URL).mock(return_value=Response(201, json={}))
         assert await send_text("0501234567", "test") is True
 
+    @_DISABLE_META
     @respx.mock
     async def test_returns_false_on_non_200(self):
         from services.whatsapp import send_text
@@ -73,6 +78,7 @@ class TestSendText:
         respx.post(SEND_TEXT_URL).mock(return_value=Response(500, text="error"))
         assert await send_text("0501234567", "test") is False
 
+    @_DISABLE_META
     @respx.mock
     async def test_returns_false_on_network_error(self):
         from services.whatsapp import send_text
@@ -80,6 +86,7 @@ class TestSendText:
         respx.post(SEND_TEXT_URL).mock(side_effect=ConnectError("timeout"))
         assert await send_text("0501234567", "test") is False
 
+    @_DISABLE_META
     @respx.mock
     async def test_sends_correct_payload(self):
         from services.whatsapp import send_text
@@ -109,7 +116,8 @@ class TestSendOtp:
             captured.append(text)
             return True
 
-        with patch("services.whatsapp.send_text", _fake_send):
+        with patch("services.whatsapp.send_text", _fake_send), \
+             patch("services.whatsapp._meta_enabled", return_value=False):
             result = await send_otp("0501234567", "123456")
 
         assert result is True
@@ -124,7 +132,8 @@ class TestSendOtp:
             captured.append(text)
             return True
 
-        with patch("services.whatsapp.send_text", _fake_send):
+        with patch("services.whatsapp.send_text", _fake_send), \
+             patch("services.whatsapp._meta_enabled", return_value=False):
             await send_otp("0501234567", "999888")
 
         # Should contain Hebrew characters
@@ -144,7 +153,8 @@ class TestNotifications:
             calls.append((phone, text))
             return True
 
-        with patch("services.whatsapp.send_text", _fake):
+        with patch("services.whatsapp.send_text", _fake), \
+             patch("services.whatsapp._meta_enabled", return_value=False):
             await fn(*args)
 
         return calls

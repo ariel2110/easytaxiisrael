@@ -103,7 +103,8 @@ async def client(fake_redis):
     app.dependency_overrides[get_db] = _override_get_db
 
     with patch("core.security.redis_client", fake_redis), \
-         patch("api.auth._redis_client", fake_redis):
+         patch("api.auth._redis_client", fake_redis), \
+         patch("core.redis.redis_client", fake_redis):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:

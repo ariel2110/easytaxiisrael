@@ -87,7 +87,8 @@ class TestPassengerOtpFlow:
             sent_messages.append(text)
             return True
 
-        with patch("services.whatsapp.send_text", side_effect=_fake_send_text):
+        with patch("services.whatsapp.send_text", side_effect=_fake_send_text), \
+             patch("services.whatsapp._meta_enabled", return_value=False):
             resp = await client.post("/auth/otp/request", json={"phone": "+972501500004"})
 
         otp = resp.json().get("otp", "")

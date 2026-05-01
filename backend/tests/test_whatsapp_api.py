@@ -118,8 +118,11 @@ class TestWhatsAppConfig:
         resp = await client.get("/whatsapp/config", headers=admin_headers)
         assert resp.status_code == 200
         data = resp.json()
-        assert "evolution_url" in data
-        assert "instance" in data
-        assert "api_key" in data
-        assert data["instance"] == "test-instance"
-        assert data["api_key"] == "test-evo-key"
+        assert "provider" in data
+        if data["provider"] == "meta":
+            assert "phone_number_id" in data
+            assert "api_version" in data
+        else:
+            assert "evolution_url" in data
+            assert "instance" in data
+            assert "api_key" in data

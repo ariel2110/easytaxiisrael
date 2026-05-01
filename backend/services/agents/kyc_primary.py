@@ -8,7 +8,7 @@ Does NOT apply Israeli law — that's Agent 2's job.
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any
 
 from .base import BaseAgent, AgentResult
@@ -75,7 +75,7 @@ For EVERY document return this base structure:
 }
 """
 
-_TODAY = datetime.utcnow().strftime("%Y-%m-%d")
+_TODAY = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
 class KYCPrimaryAgent(BaseAgent):
