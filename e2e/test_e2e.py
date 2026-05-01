@@ -366,3 +366,231 @@ class TestTokenRefresh:
                 json={"refresh_token": "garbage-token"},
             )
         assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+class TestSystemHealth:
+    """E2E tests for the new /admin/system-health endpoint."""
+
+    async def test_system_health_requires_admin_key(self):
+        async with httpx.AsyncClient(verify=False, timeout=15) as c:
+            resp = await c.get(f"{API_URL}/admin/system-health")
+        assert resp.status_code == 403
+
+    async def test_system_health_returns_200_with_key(self):
+        async with httpx.AsyncClient(verify=False, timeout=15) as c:
+            resp = await c.get(
+                f"{API_URL}/admin/system-health",
+                headers={"X-Admin-Key": ADMIN_KEY},
+            )
+        assert resp.status_code == 200
+
+    async def test_system_health_has_overall_field(self):
+        async with httpx.AsyncClient(verify=False, timeout=15) as c:
+            resp = await c.get(
+                f"{API_URL}/admin/system-health",
+                headers={"X-Admin-Key": ADMIN_KEY},
+            )
+        data = resp.json()
+        assert "overall" in data
+        assert data["overall"] in ("ok", "degraded", "error")
+
+    async def test_system_health_has_services(self):
+        async with httpx.AsyncClient(verify=False, timeout=15) as c:
+            resp = await c.get(
+                f"{API_URL}/admin/system-health",
+                headers={"X-Admin-Key": ADMIN_KEY},
+            )
+        data = resp.json()
+        assert "services" in data
+        svc = data["services"]
+        assert "database" in svc
+        assert "redis" in svc
+        assert "whatsapp" in svc
+
+    async def test_system_health_database_is_ok(self):
+        async with httpx.AsyncClient(verify=False, timeout=15) as c:
+            resp = await c.get(
+                f"{API_URL}/admin/system-health",
+                headers={"X-Admin-Key": ADMIN_KEY},
+            )
+        data = resp.json()
+        db = data["services"]["database"]
+        assert db["status"] == "ok"
+        assert db["users"] >= 0
+
+    async def test_system_health_redis_is_ok(self):
+        async with httpx.AsyncClient(verify=False, timeout=15) as c:
+            resp = await c.get(
+                f"{API_URL}/admin/system-health",
+                headers={"X-Admin-Key": ADMIN_KEY},
+            )
+        data = resp.json()
+        redis = data["services"]["redis"]
+        assert redis["status"] == "ok"
+
+    async def test_system_health_whatsapp_has_provider(self):
+        async with httpx.AsyncClient(verify=False, timeout=15) as c:
+            resp = await c.get(
+                f"{API_URL}/admin/system-health",
+                headers={"X-Admin-Key": ADMIN_KEY},
+            )
+        data = resp.json()
+        wa = data["services"]["whatsapp"]
+        assert "provider" in wa
+        assert wa["provider"] in ("meta", "evolution", "unknown")
+
+    async def test_system_health_has_agents(self):
+        async with httpx.AsyncClient(verify=False, timeout=15) as c:
+            resp = await c.get(
+                f"{API_URL}/admin/system-health",
+                headers={"X-Admin-Key": ADMIN_KEY},
+            )
+        data = resp.json()
+        assert "agents" in data
+        assert isinstance(data["agents"], list)
+        assert len(data["agents"]) > 0
+        agent = data["agents"][0]
+        assert "id" in agent
+        assert "name" in agent
+        assert "enabled" in agent
+
+    async def test_system_health_has_llm_keys(self):
+        async with httpx.AsyncClient(verify=False, timeout=15) as c:
+            resp = await c.get(
+                f"{API_URL}/admin/system-health",
+                headers={"X-Admin-Key": ADMIN_KEY},
+            )
+        data = resp.json()
+        assert "llm_keys" in data
+        lk = data["llm_keys"]
+        assert isinstance(lk, dict)
+        assert "openai" in lk
+        assert "anthropic" in lk
+
+    async def test_system_health_has_timestamp(self):
+        async with httpx.AsyncClient(verify=False, timeout=15) as c:
+            resp = await c.get(
+                f"{API_URL}/admin/system-health",
+                headers={"X-Admin-Key": ADMIN_KEY},
+            )
+        data = resp.json()
+        assert "timestamp" in data
+
+
+@pytest.mark.asyncio
+class TestDailyReport:
+    """E2E tests for the AI Daily Report endpoints."""
+
+    async def test_get_report_requires_admin_key(self):
+        async with httpx.AsyncClient(verify=False, timeout=15) as c:
+            resp = await c.get(f"{API_URL}/admin/daily-report")
+        assert resp.status_code == 403
+
+    async def test_generate_report_requires_admin_key(self):
+        async with httpx.AsyncClient(verify=False, timeout=15) as c:
+            resp = await c.post(f"{API_URL}/admin/daily-report/generate")
+        assert resp.status_code == 403
+
+    async def test_get_report_returns_404_or_200(self):
+        """Before generating, report may not exist (404) or may be cached (200)."""
+        async with httpx.AsyncClient(verify=False, timeout=30) as c:
+            resp = await c.get(
+                f"{API_URL}/admin/daily-report",
+                headers={"X-Admin-Key": ADMIN_KEY},
+            )
+        assert resp.status_code in (200, 404)
+
+    async def test_generate_report_returns_200(self):
+        """Generates a new report — may take 15–30 seconds with LLM."""
+        async with httpx.AsyncClient(verify=False, timeout=60) as c:
+            resp = await c.post(
+                f"{API_URL}/admin/daily-report/generate",
+                headers={"X-Admin-Key": ADMIN_KEY},
+            )
+        assert resp.status_code == 200
+
+    async def test_generate_report_has_health_score(self):
+        async with httpx.AsyncClient(verify=False, timeout=60) as c:
+            resp = await c.post(
+                f"{API_URL}/admin/daily-report/generate",
+                headers={"X-Admin-Key": ADMIN_KEY},
+            )
+        data = resp.json()
+        assert "overall_health_score" in data
+        score = data["overall_health_score"]
+        assert 0 <= score <= 100
+
+    async def test_generate_report_has_executive_summary(self):
+        async with httpx.AsyncClient(verify=False, timeout=60) as c:
+            resp = await c.post(
+                f"{API_URL}/admin/daily-report/generate",
+                headers={"X-Admin-Key": ADMIN_KEY},
+            )
+        data = resp.json()
+        assert "executive_summary" in data
+        assert len(data["executive_summary"]) > 10
+
+    async def test_generate_report_has_top_actions(self):
+        async with httpx.AsyncClient(verify=False, timeout=60) as c:
+            resp = await c.post(
+                f"{API_URL}/admin/daily-report/generate",
+                headers={"X-Admin-Key": ADMIN_KEY},
+            )
+        data = resp.json()
+        assert "top_actions" in data
+        assert isinstance(data["top_actions"], list)
+
+    async def test_get_report_after_generate_returns_200(self):
+        """After generating, GET should return cached report."""
+        async with httpx.AsyncClient(verify=False, timeout=60) as c:
+            await c.post(
+                f"{API_URL}/admin/daily-report/generate",
+                headers={"X-Admin-Key": ADMIN_KEY},
+            )
+            resp = await c.get(
+                f"{API_URL}/admin/daily-report",
+                headers={"X-Admin-Key": ADMIN_KEY},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "overall_health_score" in data
+
+
+@pytest.mark.asyncio
+class TestAdminControlCenterUI:
+    """UI E2E tests for the new Control Center and Daily Report pages."""
+
+    async def test_control_center_page_loads(self, page: Page):
+        await page.goto(f"{BASE_URL}/admin/", timeout=TIMEOUT_MS, wait_until="networkidle")
+        # Login if needed
+        if "/login" in page.url:
+            await page.fill("input[type='text'], input[name='username']", ADMIN_USER)
+            await page.fill("input[type='password']", ADMIN_PASS)
+            await page.click("button[type='submit']")
+            await page.wait_for_url("**/admin/**", timeout=TIMEOUT_MS)
+
+        await page.goto(f"{BASE_URL}/admin/control", timeout=TIMEOUT_MS, wait_until="networkidle")
+        await expect(page.get_by_text("מרכז שליטה")).to_be_visible()
+
+    async def test_daily_report_page_loads(self, page: Page):
+        await page.goto(f"{BASE_URL}/admin/", timeout=TIMEOUT_MS, wait_until="networkidle")
+        if "/login" in page.url:
+            await page.fill("input[type='text'], input[name='username']", ADMIN_USER)
+            await page.fill("input[type='password']", ADMIN_PASS)
+            await page.click("button[type='submit']")
+            await page.wait_for_url("**/admin/**", timeout=TIMEOUT_MS)
+
+        await page.goto(f"{BASE_URL}/admin/report", timeout=TIMEOUT_MS, wait_until="networkidle")
+        await expect(page.get_by_text("דוח יומי")).to_be_visible()
+
+    async def test_handbook_page_loads(self, page: Page):
+        await page.goto(f"{BASE_URL}/admin/", timeout=TIMEOUT_MS, wait_until="networkidle")
+        if "/login" in page.url:
+            await page.fill("input[type='text'], input[name='username']", ADMIN_USER)
+            await page.fill("input[type='password']", ADMIN_PASS)
+            await page.click("button[type='submit']")
+            await page.wait_for_url("**/admin/**", timeout=TIMEOUT_MS)
+
+        await page.goto(f"{BASE_URL}/admin/handbook", timeout=TIMEOUT_MS, wait_until="networkidle")
+        await expect(page.get_by_text("מדריך המערכת")).to_be_visible()

@@ -120,3 +120,215 @@ export interface SumsubApplicantsResponse {
   total: number
   applicants: SumsubApplicant[]
 }
+
+// ── System Health ────────────────────────────────────────────────
+export interface SystemHealthAgent {
+  id: string
+  name: string
+  icon: string
+  model: string
+  enabled: boolean
+  key_field: string
+  key_configured: boolean
+}
+
+export interface SystemHealth {
+  overall: 'ok' | 'degraded' | 'error'
+  timestamp: string
+  services: {
+    database: { status: string; users: number; drivers: number; rides: number }
+    redis:    { status: string; memory: string }
+    whatsapp: {
+      status: string
+      provider: string
+      state: string
+      phone: string | null
+      profile_name: string | null
+      quality_rating: string
+      phone_number_id: string
+    }
+  }
+  llm_keys: Record<string, boolean>
+  agents: SystemHealthAgent[]
+  agents_enabled_count: number
+  agents_total_count: number
+}
+
+// ── Daily AI Report ──────────────────────────────────────────────
+export interface KPI {
+  name: string
+  value: string | number
+  benchmark: string | number
+  status: 'good' | 'warning' | 'critical'
+  trend: 'up' | 'down' | 'stable'
+}
+
+export interface TopAction {
+  priority: number
+  title: string
+  description: string
+  timeframe: string
+  effort: 'low' | 'medium' | 'high'
+  impact: 'low' | 'medium' | 'high'
+}
+
+export interface Bottleneck {
+  area: string
+  description: string
+  impact_level: 'low' | 'medium' | 'high'
+  affected_party: 'driver' | 'passenger' | 'platform' | 'all'
+}
+
+export interface GrowthOpportunity {
+  title: string
+  description: string
+  potential_revenue_ils_monthly: number | null
+  complexity: 'low' | 'medium' | 'high'
+}
+
+export interface TechHealth {
+  score: number
+  strong_points: string[]
+  weak_points: string[]
+  recommendations: string[]
+}
+
+export interface DailyReport {
+  executive_summary: string
+  overall_health_score: number
+  health_label: string
+  kpis: KPI[]
+  bottlenecks: Bottleneck[]
+  top_actions: TopAction[]
+  growth_opportunities: GrowthOpportunity[]
+  tech_health: TechHealth
+  generated_at: string
+  model_used?: string
+}
+
+// ── Demo Report ────────────────────────────────────────────────────
+
+export interface DemoDoc {
+  name: string
+  doc_number: string
+  expiry: string
+  type: string
+}
+
+export interface DemoDriver {
+  number: number
+  name: string
+  phone: string
+  city: string
+  vehicle_number: string
+  driver_type: 'licensed_taxi' | 'rideshare'
+  docs: DemoDoc[]
+  doc_count: number
+  audit_logs_created: number
+}
+
+export interface DemoPassenger {
+  number: number
+  name: string
+  phone: string
+}
+
+export interface DemoAddressChange {
+  original_dropoff: string
+  new_dropoff: string
+  original_km: number
+  new_km: number
+}
+
+export interface DemoRideTimeline {
+  requested: string
+  assigned: string
+  accepted: string
+  started: string | null
+  completed: string | null
+  cancelled: string | null
+}
+
+export interface DemoRide {
+  scenario_id: number
+  status: 'completed' | 'cancelled'
+  special: string
+  special_code: string
+  passenger: string
+  driver: string
+  driver_city: string
+  driver_vehicle: string
+  pickup: string
+  dropoff: string
+  distance_km: number
+  ride_minutes: number
+  wait_minutes: number
+  traffic_minutes: number
+  multiplier: number
+  total_fare: number
+  platform_fee: number
+  driver_earnings: number
+  passenger_rating: number | null
+  driver_rating: number | null
+  passenger_comment: string | null
+  driver_comment: string | null
+  address_change: DemoAddressChange | null
+  timeline: DemoRideTimeline
+}
+
+export interface DemoSummary {
+  drivers_created: number
+  passengers_created: number
+  rides_created: number
+  rides_completed: number
+  rides_cancelled: number
+  total_revenue_ils: number
+  total_platform_fee_ils: number
+  audit_logs_created: number
+}
+
+export interface Lead {
+  id: string
+  phone: string | null
+  name: string | null
+  status: string
+  source: string
+  whatsapp_capable: boolean
+  message_text: string | null
+  area: string | null
+  business_type: string | null
+  email: string | null
+  website: string | null
+  notes: string | null
+  approved_at: string | null
+  sent_at: string | null
+  created_at: string
+}
+
+export interface FindLeadsResponse {
+  found: number
+  inserted: number
+  skipped_duplicate: number
+  skipped_no_phone: number
+  whatsapp_capable: number
+  with_email: number
+}
+
+export interface LeadsListResponse {
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+  items: Lead[]
+}
+
+export interface DemoReportData {
+  seeded?: boolean
+  already_seeded?: boolean
+  message?: string
+  summary: DemoSummary
+  drivers: DemoDriver[]
+  passengers: DemoPassenger[]
+  rides: DemoRide[]
+  generated_at: string
+}

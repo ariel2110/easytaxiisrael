@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-const WA = 'https://wa.me/447474775344?text=%D7%A9%D7%9C%D7%95%D7%9D%2C%20%D7%90%D7%A0%D7%99%20%D7%A8%D7%95%D7%A6%D7%94%20%D7%9C%D7%94%D7%A6%D7%98%D7%A3%20%D7%9B%D7%A0%D7%94%D7%92%20%F0%9F%9A%97'
+const WA = 'https://wa.me/972552858732?text=%D7%A9%D7%9C%D7%95%D7%9D%2C%20%D7%90%D7%A0%D7%99%20%D7%A8%D7%95%D7%A6%D7%94%20%D7%9C%D7%94%D7%A6%D7%98%D7%A3%20%D7%9B%D7%A0%D7%94%D7%92%20%F0%9F%9A%97'
 
 const CSS = `
 .dp *, .dp *::before, .dp *::after { box-sizing: border-box; margin: 0; padding: 0; }

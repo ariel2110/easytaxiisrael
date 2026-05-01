@@ -9,6 +9,9 @@ GET  /admin/drivers                  — list drivers with compliance + wallet
 GET  /admin/stats                    — platform-wide statistics
 GET  /admin/audit-logs               — recent audit trail (paginated)
 GET  /admin/rides                    — all rides (paginated, filterable by status)
+GET  /admin/system-health            — deep system health (DB, Redis, WA, agents)
+GET  /admin/daily-report             — get cached AI strategic report
+POST /admin/daily-report/generate    — generate new AI strategic report
 """
 
 import uuid
@@ -20,6 +23,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.config import settings
 from core.database import get_db
 from core.dependencies import require_admin_key
 from models.audit import AuditAction, AuditLog
@@ -379,3 +383,622 @@ async def list_all_rides(
         }
         for r in rides
     ]
+
+
+# ---------------------------------------------------------------------------
+# System Health
+# ---------------------------------------------------------------------------
+
+_AGENT_DEFS = [
+    {"id": "dispatch",           "name": "Dispatch Agent",       "icon": "🚗", "key_field": "GROQ_API_KEY",       "model": "Llama 3.1 70B"},
+    {"id": "compliance",         "name": "Compliance Agent",     "icon": "⚖️", "key_field": "ANTHROPIC_API_KEY",  "model": "Claude 3.5 Sonnet"},
+    {"id": "onboarding",         "name": "Onboarding Agent",     "icon": "📄", "key_field": "OPENAI_API_KEY",     "model": "GPT-4o Vision"},
+    {"id": "kyc_primary",        "name": "KYC Primary Agent",    "icon": "🪪", "key_field": "OPENAI_API_KEY",     "model": "GPT-4o Vision"},
+    {"id": "kyc_reviewer",       "name": "KYC Reviewer Agent",   "icon": "🔍", "key_field": "ANTHROPIC_API_KEY",  "model": "Claude 3.5 Sonnet"},
+    {"id": "support",            "name": "Support Agent",        "icon": "💬", "key_field": "OPENAI_API_KEY",     "model": "GPT-4o mini"},
+    {"id": "orchestrator",       "name": "Orchestrator Agent",   "icon": "🎯", "key_field": "GOOGLE_AI_API_KEY",  "model": "Gemini 1.5 Pro"},
+    {"id": "strategic_architect","name": "Strategic Architect",  "icon": "📈", "key_field": "ANTHROPIC_API_KEY",  "model": "Claude Sonnet 4.5"},
+]
+
+
+def _mask(value: str | None) -> str | None:
+    if not value:
+        return None
+    return value[:8] + "..." + value[-4:] if len(value) > 12 else "***"
+
+
+@router.get("/system-health", summary="Deep system health check — DB, Redis, WhatsApp, agents, LLM keys")
+async def system_health(
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_admin),
+) -> dict:
+    from core.redis import redis_client
+    from services.whatsapp import _meta_enabled
+
+    # DB health
+    try:
+        await db.execute(select(func.count(User.id)))
+        db_ok = True
+    except Exception:
+        db_ok = False
+
+    # Redis health
+    try:
+        await redis_client.ping()
+        redis_ok = True
+        redis_info = await redis_client.info("memory") if hasattr(redis_client, "info") else {}
+        redis_mem = redis_info.get("used_memory_human", "N/A") if isinstance(redis_info, dict) else "N/A"
+    except Exception:
+        redis_ok = False
+        redis_mem = "N/A"
+
+    # WhatsApp health
+    try:
+        from services import whatsapp as wa_svc
+        wa_info = await wa_svc.get_instance_info()
+        wa_state = await wa_svc.get_connection_state()
+        wa_ok = wa_state in ("open", "CONNECTED")
+        wa_provider = "meta" if _meta_enabled() else "evolution"
+        wa_phone = (wa_info or {}).get("owner_phone") or (wa_info or {}).get("owner", "")
+        wa_phone = wa_phone.replace("@s.whatsapp.net", "") if wa_phone else None
+        wa_quality = (wa_info or {}).get("quality_rating", "UNKNOWN")
+        wa_profile = (wa_info or {}).get("profileName") or (wa_info or {}).get("profile_name")
+    except Exception:
+        wa_ok = False
+        wa_provider = "meta" if _meta_enabled() else "evolution"
+        wa_phone = None
+        wa_quality = "UNKNOWN"
+        wa_profile = None
+        wa_state = "unknown"
+
+    # LLM keys status
+    llm_keys = {
+        "openai":    bool(settings.OPENAI_API_KEY),
+        "anthropic": bool(settings.ANTHROPIC_API_KEY),
+        "groq":      bool(getattr(settings, "GROQ_API_KEY", None)),
+        "google":    bool(settings.GOOGLE_AI_API_KEY),
+        "xai":       bool(getattr(settings, "XAI_API_KEY", None)),
+        "deepseek":  bool(getattr(settings, "DEEPSEEK_API_KEY", None)),
+    }
+
+    # Agent statuses
+    key_map = {
+        "OPENAI_API_KEY":    bool(settings.OPENAI_API_KEY),
+        "ANTHROPIC_API_KEY": bool(settings.ANTHROPIC_API_KEY),
+        "GROQ_API_KEY":      bool(getattr(settings, "GROQ_API_KEY", None)),
+        "GOOGLE_AI_API_KEY": bool(settings.GOOGLE_AI_API_KEY),
+    }
+    agents = []
+    for a in _AGENT_DEFS:
+        key_ok = key_map.get(a["key_field"], False)
+        agents.append({
+            "id": a["id"],
+            "name": a["name"],
+            "icon": a["icon"],
+            "model": a["model"],
+            "enabled": key_ok,
+            "key_field": a["key_field"],
+            "key_configured": key_ok,
+        })
+
+    # Quick DB counts
+    try:
+        user_count = (await db.execute(select(func.count(User.id)))).scalar() or 0
+        driver_count = (await db.execute(select(func.count(User.id)).where(User.role == UserRole.driver))).scalar() or 0
+        ride_count = (await db.execute(select(func.count(Ride.id)))).scalar() or 0
+    except Exception:
+        user_count = driver_count = ride_count = 0
+
+    overall_ok = db_ok and redis_ok
+
+    return {
+        "overall": "ok" if overall_ok else "degraded",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "services": {
+            "database": {"status": "ok" if db_ok else "error", "users": user_count, "drivers": driver_count, "rides": ride_count},
+            "redis":    {"status": "ok" if redis_ok else "error", "memory": redis_mem},
+            "whatsapp": {
+                "status": "ok" if wa_ok else "warning",
+                "provider": wa_provider,
+                "state": wa_state,
+                "phone": wa_phone,
+                "profile_name": wa_profile,
+                "quality_rating": wa_quality,
+                "phone_number_id": settings.WHATSAPP_PHONE_NUMBER_ID,
+            },
+        },
+        "llm_keys": llm_keys,
+        "agents": agents,
+        "agents_enabled_count": sum(1 for a in agents if a["enabled"]),
+        "agents_total_count": len(agents),
+    }
+
+
+# ---------------------------------------------------------------------------
+# AI Daily Report (Strategic Architect)
+# ---------------------------------------------------------------------------
+
+_REPORT_REDIS_KEY = "admin:daily_report"
+_REPORT_TTL_SECONDS = 86400  # 24 hours
+
+
+@router.get("/daily-report", summary="Get the latest AI strategic report (cached, generated daily)")
+async def get_daily_report(_: None = Depends(_admin)) -> dict:
+    from core.redis import redis_client
+    import json as _json
+
+    raw = await redis_client.get(_REPORT_REDIS_KEY)
+    if not raw:
+        raise HTTPException(
+            status_code=404,
+            detail="אין דוח זמין. לחץ 'צור דוח חדש' כדי לייצר דוח AI.",
+        )
+    try:
+        return _json.loads(raw)
+    except Exception:
+        raise HTTPException(status_code=500, detail="שגיאה בקריאת הדוח השמור")
+
+
+@router.post("/daily-report/generate", summary="Generate a new AI strategic report and cache it for 24h")
+async def generate_daily_report(
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_admin),
+) -> dict:
+    import json as _json
+    from core.redis import redis_client
+    from services.agents.strategic_architect import StrategicArchitectAgent
+    from services.whatsapp import _meta_enabled
+
+    # Collect platform stats
+    try:
+        total_users    = (await db.execute(select(func.count(User.id)))).scalar() or 0
+        total_drivers  = (await db.execute(select(func.count(User.id)).where(User.role == UserRole.driver))).scalar() or 0
+        active_drivers = (await db.execute(select(func.count(User.id)).where(User.role == UserRole.driver, User.is_active == True))).scalar() or 0  # noqa
+        total_pax      = (await db.execute(select(func.count(User.id)).where(User.role == UserRole.passenger))).scalar() or 0
+        total_rides    = (await db.execute(select(func.count(Ride.id)))).scalar() or 0
+        completed      = (await db.execute(select(func.count(Ride.id)).where(Ride.status == RideStatus.completed))).scalar() or 0
+        cancelled      = (await db.execute(select(func.count(Ride.id)).where(Ride.status == RideStatus.cancelled))).scalar() or 0
+        pending        = (await db.execute(select(func.count(Ride.id)).where(Ride.status == RideStatus.pending))).scalar() or 0
+        revenue_row    = await db.execute(select(func.sum(RidePayment.platform_fee)))
+        revenue        = float(revenue_row.scalar() or 0.0)
+        payment_count  = (await db.execute(select(func.count(RidePayment.id)))).scalar() or 0
+    except Exception:
+        total_users = total_drivers = active_drivers = total_pax = 0
+        total_rides = completed = cancelled = pending = payment_count = 0
+        revenue = 0.0
+
+    stats = {
+        "total_users": total_users,
+        "total_drivers": total_drivers,
+        "active_drivers": active_drivers,
+        "total_passengers": total_pax,
+        "total_rides": total_rides,
+        "completed_rides": completed,
+        "cancelled_rides": cancelled,
+        "pending_rides": pending,
+        "total_revenue": revenue,
+        "total_payments": payment_count,
+    }
+
+    # Agent statuses
+    key_map = {
+        "OPENAI_API_KEY":    bool(settings.OPENAI_API_KEY),
+        "ANTHROPIC_API_KEY": bool(settings.ANTHROPIC_API_KEY),
+        "GROQ_API_KEY":      bool(getattr(settings, "GROQ_API_KEY", None)),
+        "GOOGLE_AI_API_KEY": bool(settings.GOOGLE_AI_API_KEY),
+    }
+    agents_status = [
+        {"name": a["name"], "enabled": key_map.get(a["key_field"], False), "model": a["model"]}
+        for a in _AGENT_DEFS
+    ]
+
+    # WhatsApp status
+    try:
+        from services import whatsapp as wa_svc
+        wa_info = await wa_svc.get_instance_info()
+        wa_state = await wa_svc.get_connection_state()
+        wa_dict = {
+            "provider": "meta" if _meta_enabled() else "evolution",
+            "state": wa_state,
+            "owner_phone": (wa_info or {}).get("owner_phone") or (wa_info or {}).get("owner", ""),
+            "quality_rating": (wa_info or {}).get("quality_rating", "UNKNOWN"),
+        }
+    except Exception:
+        wa_dict = {"provider": "meta" if _meta_enabled() else "evolution", "state": "unknown"}
+
+    # DB/Redis health
+    try:
+        await db.execute(select(func.count(User.id)))
+        db_health = "ok"
+    except Exception:
+        db_health = "error"
+
+    try:
+        from core.redis import redis_client
+        await redis_client.ping()
+        redis_health = "ok"
+    except Exception:
+        redis_health = "error"
+
+    # Run agent
+    agent = StrategicArchitectAgent()
+    result = await agent.run({
+        "stats": stats,
+        "agents_status": agents_status,
+        "whatsapp": wa_dict,
+        "db_health": db_health,
+        "redis_health": redis_health,
+    })
+
+    report = result.data or {}
+    report["model_used"] = result.model_used
+    report["generated_at"] = datetime.now(timezone.utc).isoformat()
+
+    # Cache in Redis for 24h
+    from core.redis import redis_client as rc
+    await rc.set(_REPORT_REDIS_KEY, _json.dumps(report, ensure_ascii=False), ex=_REPORT_TTL_SECONDS)
+
+    return report
+
+
+# ---------------------------------------------------------------------------
+# Demo Seed
+# ---------------------------------------------------------------------------
+
+_DEMO_REDIS_KEY  = "admin:demo_report"
+_DEMO_TTL        = 60 * 60 * 24 * 7  # 7 days
+
+
+@router.get("/demo-report", summary="Get cached demo seed report")
+async def get_demo_report(_: None = Depends(_admin)) -> dict:
+    import json as _json
+    from core.redis import redis_client
+
+    raw = await redis_client.get(_DEMO_REDIS_KEY)
+    if not raw:
+        raise HTTPException(
+            status_code=404,
+            detail="לא נמצא דוח דמו. הרץ POST /admin/seed-demo תחילה.",
+        )
+    return _json.loads(raw)
+
+
+@router.post("/seed-demo", summary="Seed demo drivers, passengers, and 10 ride scenarios")
+async def seed_demo(
+    force: bool = False,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_admin),
+) -> dict:
+    import json as _json
+    from core.redis import redis_client
+    from scripts.seed_demo import seed_demo as _run_seed
+
+    result = await _run_seed(db, force=force)
+
+    # Cache result in Redis for 7 days
+    await redis_client.set(_DEMO_REDIS_KEY, _json.dumps(result, ensure_ascii=False, default=str), ex=_DEMO_TTL)
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Driver Leads Board
+# ---------------------------------------------------------------------------
+
+@router.get("/leads", summary="List driver leads (filterable, paginated)")
+async def list_leads(
+    status_filter: str | None = Query(None, alias="status"),
+    whatsapp_only: bool = Query(False),
+    area: str | None = Query(None),
+    search: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=5, le=200),
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_admin),
+) -> dict:
+    from models.growth import Lead, LeadStatus
+    from sqlalchemy import and_, or_
+
+    conditions = []
+    if status_filter:
+        try:
+            conditions.append(Lead.status == LeadStatus(status_filter))
+        except ValueError:
+            pass
+    if whatsapp_only:
+        conditions.append(Lead.whatsapp_capable == True)  # noqa: E712
+    if area:
+        conditions.append(Lead.area.ilike(f"%{area}%"))
+    if search:
+        conditions.append(or_(
+            Lead.name.ilike(f"%{search}%"),
+            Lead.phone.ilike(f"%{search}%"),
+            Lead.area.ilike(f"%{search}%"),
+            Lead.email.ilike(f"%{search}%"),
+        ))
+
+    base_q = select(Lead)
+    if conditions:
+        base_q = base_q.where(and_(*conditions))
+
+    # Hot leads first (WA capable), then by created_at desc
+    base_q = base_q.order_by(
+        Lead.whatsapp_capable.desc(),
+        Lead.status.asc(),
+        Lead.created_at.desc(),
+    )
+
+    total_q = select(func.count()).select_from(base_q.subquery())
+    total = (await db.execute(total_q)).scalar_one()
+
+    skip = (page - 1) * page_size
+    rows = (await db.execute(base_q.offset(skip).limit(page_size))).scalars().all()
+
+    import math
+    total_pages = max(1, math.ceil(total / page_size))
+
+    def _fmt(lead: "Lead") -> dict:
+        return {
+            "id": str(lead.id),
+            "phone": lead.phone,
+            "name": lead.name,
+            "status": lead.status.value,
+            "source": lead.source.value,
+            "whatsapp_capable": lead.whatsapp_capable,
+            "message_text": lead.message_text,
+            "area": lead.area,
+            "business_type": lead.business_type,
+            "email": lead.email,
+            "website": lead.website,
+            "notes": lead.notes,
+            "approved_at": lead.approved_at.isoformat() if lead.approved_at else None,
+            "sent_at": lead.sent_at.isoformat() if lead.sent_at else None,
+            "created_at": lead.created_at.isoformat(),
+        }
+
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+        "items": [_fmt(r) for r in rows],
+    }
+
+
+@router.post("/leads/find", summary="Find taxi driver leads via Google Places")
+async def find_leads(
+    max_results: int = Query(50, le=200),
+    region: str = Query("all", description="all | center | sharon | haifa | jerusalem | south | coastal | galilee"),
+    city: str | None = Query(None, description="Filter to a specific city (substring match)"),
+    google_api_key: str | None = Query(None, description="Override GOOGLE_MAPS_API_KEY"),
+    scrape_websites: bool = Query(True, description="Scrape websites for additional contacts"),
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_admin),
+) -> dict:
+    from models.growth import Lead, LeadSource, LeadStatus
+    from services.agents.lead_finder import find_taxi_leads
+    from services.agents.website_scraper import scrape_contacts
+
+    raw_leads = await find_taxi_leads(
+        max_results=max_results,
+        region=region,
+        city=city,
+        google_api_key=google_api_key,
+    )
+
+    # Scrape websites for email/extra phones
+    if scrape_websites:
+        for lead_data in raw_leads:
+            if lead_data.get("website"):
+                try:
+                    scraped = await scrape_contacts(lead_data["website"])
+                    # Use first scraped email
+                    if scraped.get("emails") and not lead_data.get("email"):
+                        lead_data["email"] = scraped["emails"][0]
+                    # If no WA phone, try scraped mobile
+                    if not lead_data.get("phone") and scraped.get("mobile_phones"):
+                        lead_data["phone"] = scraped["mobile_phones"][0]
+                        lead_data["whatsapp_capable"] = True
+                    elif not lead_data.get("phone") and scraped.get("landline_phones"):
+                        lead_data["phone"] = scraped["landline_phones"][0]
+                except Exception:
+                    pass
+
+    inserted = 0
+    skipped_no_phone = 0
+    skipped_duplicate = 0
+    wa_count = 0
+    email_count = 0
+
+    for lead_data in raw_leads:
+        phone = lead_data.get("phone")
+
+        # Leads without phone still saved — marked as non-WA
+        if not phone:
+            phone = f"NOPHONE_{lead_data['google_place_id']}"
+            skipped_no_phone += 1
+
+        # Skip if already exists (any status — including rejected)
+        existing = (await db.execute(select(Lead).where(Lead.phone == phone))).scalar_one_or_none()
+        if existing:
+            skipped_duplicate += 1
+            continue
+
+        # Also skip by place_id to catch same business with different phone
+        place_id = lead_data.get("google_place_id")
+        if place_id:
+            existing_by_place = (await db.execute(
+                select(Lead).where(Lead.google_place_id == place_id)
+            )).scalar_one_or_none()
+            if existing_by_place:
+                skipped_duplicate += 1
+                continue
+
+        email = lead_data.get("email")
+        if email:
+            email_count += 1
+        if lead_data.get("whatsapp_capable"):
+            wa_count += 1
+
+        lead = Lead(
+            phone=phone,
+            name=lead_data.get("name"),
+            source=LeadSource.google_places,
+            status=LeadStatus.new,
+            whatsapp_capable=lead_data.get("whatsapp_capable", False),
+            area=lead_data.get("area"),
+            business_type=lead_data.get("business_type"),
+            google_place_id=lead_data.get("google_place_id"),
+            website=lead_data.get("website"),
+            email=email,
+            notes=lead_data.get("notes"),
+        )
+        db.add(lead)
+        inserted += 1
+
+    await db.commit()
+    return {
+        "found": len(raw_leads),
+        "inserted": inserted,
+        "skipped_duplicate": skipped_duplicate,
+        "skipped_no_phone": skipped_no_phone,
+        "whatsapp_capable": wa_count,
+        "with_email": email_count,
+    }
+
+
+@router.post("/leads/generate-messages", summary="Generate AI recruitment messages for all leads without one")
+async def generate_all_messages(
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_admin),
+) -> dict:
+    from models.growth import Lead
+    from services.agents.recruitment_agent import generate_message
+
+    rows = (await db.execute(
+        select(Lead).where(Lead.message_text == None)  # noqa: E711
+    )).scalars().all()
+
+    generated = 0
+    for lead in rows:
+        msg = await generate_message(
+            name=lead.name,
+            area=lead.area,
+            business_type=lead.business_type,
+        )
+        lead.message_text = msg
+        generated += 1
+
+    await db.commit()
+    return {"generated": generated}
+
+
+@router.post("/leads/{lead_id}/generate-message", summary="Generate AI message for a single lead")
+async def generate_one_message(
+    lead_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_admin),
+) -> dict:
+    from models.growth import Lead
+    from services.agents.recruitment_agent import generate_message
+
+    lead = (await db.execute(select(Lead).where(Lead.id == uuid.UUID(lead_id)))).scalar_one_or_none()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    msg = await generate_message(name=lead.name, area=lead.area, business_type=lead.business_type)
+    lead.message_text = msg
+    await db.commit()
+    return {"id": lead_id, "message_text": msg}
+
+
+class LeadMessageUpdate(BaseModel):
+    message_text: str
+
+
+@router.patch("/leads/{lead_id}/message", summary="Update (edit) lead message text")
+async def update_lead_message(
+    lead_id: str,
+    body: LeadMessageUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_admin),
+) -> dict:
+    from models.growth import Lead
+
+    lead = (await db.execute(select(Lead).where(Lead.id == uuid.UUID(lead_id)))).scalar_one_or_none()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    lead.message_text = body.message_text
+    await db.commit()
+    return {"id": lead_id, "message_text": lead.message_text}
+
+
+@router.post("/leads/{lead_id}/approve", summary="Approve lead for WhatsApp sending")
+async def approve_lead(
+    lead_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_admin),
+) -> dict:
+    from models.growth import Lead, LeadStatus
+
+    lead = (await db.execute(select(Lead).where(Lead.id == uuid.UUID(lead_id)))).scalar_one_or_none()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    if not lead.message_text:
+        raise HTTPException(status_code=422, detail="חייב להיות טקסט הודעה לפני אישור")
+    lead.status = LeadStatus.approved
+    lead.approved_at = datetime.now(timezone.utc)
+    await db.commit()
+    return {"id": lead_id, "status": "approved"}
+
+
+@router.post("/leads/{lead_id}/reject", summary="Reject / skip a lead")
+async def reject_lead(
+    lead_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_admin),
+) -> dict:
+    from models.growth import Lead, LeadStatus
+
+    lead = (await db.execute(select(Lead).where(Lead.id == uuid.UUID(lead_id)))).scalar_one_or_none()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    lead.status = LeadStatus.rejected
+    await db.commit()
+    return {"id": lead_id, "status": "rejected"}
+
+
+@router.post("/leads/send-approved", summary="Send WhatsApp messages to all approved leads")
+async def send_approved_leads(
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_admin),
+) -> dict:
+    from models.growth import Lead, LeadStatus
+    from services import whatsapp as whatsapp_svc
+
+    approved = (await db.execute(
+        select(Lead).where(Lead.status == LeadStatus.approved, Lead.whatsapp_capable == True)  # noqa: E712
+    )).scalars().all()
+
+    if not approved:
+        raise HTTPException(status_code=404, detail="אין לידים מאושרים עם WhatsApp")
+
+    sent = 0
+    failed = 0
+    for lead in approved:
+        if not lead.message_text or not lead.phone or lead.phone.startswith("NOPHONE_"):
+            failed += 1
+            continue
+        try:
+            ok = await whatsapp_svc.send_text(lead.phone, lead.message_text)
+            if ok:
+                lead.status = LeadStatus.sent
+                lead.sent_at = datetime.now(timezone.utc)
+                sent += 1
+            else:
+                failed += 1
+        except Exception as exc:
+            failed += 1
+
+    await db.commit()
+    return {"sent": sent, "failed": failed, "total": len(approved)}

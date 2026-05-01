@@ -137,6 +137,35 @@ class BaseAgent(ABC):
             log.warning("[%s] Groq call failed: %s", self.name, exc)
             return None
 
+    # ── DeepSeek ──────────────────────────────────────────────────────────────
+
+    async def _call_deepseek(
+        self,
+        messages: list[dict],
+        model: str = "deepseek-chat",
+        json_mode: bool = False,
+    ) -> str | None:
+        key = settings.DEEPSEEK_API_KEY
+        if not key:
+            return None
+
+        payload: dict[str, Any] = {"model": model, "messages": messages}
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                r = await client.post(
+                    "https://api.deepseek.com/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {key}"},
+                    json=payload,
+                )
+                r.raise_for_status()
+                return r.json()["choices"][0]["message"]["content"]
+        except Exception as exc:
+            log.warning("[%s] DeepSeek call failed: %s", self.name, exc)
+            return None
+
     # ── Google Gemini ─────────────────────────────────────────────────────────
 
     async def _call_gemini(

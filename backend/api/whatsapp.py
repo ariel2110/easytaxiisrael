@@ -288,13 +288,21 @@ async def _handle_auth_message(phone: str, text: str, db: AsyncSession, msg_id: 
 
 async def _handle_support_message(phone: str, text: str, reply_jid: str | None = None) -> None:
     """Route a regular incoming WhatsApp message through the SupportAgent and reply."""
+    import json as _json
+    from core.redis import redis_client
     from services import whatsapp as whatsapp_svc
     from services.agents.support import SupportAgent
 
     print(f"[SUPPORT] called phone={phone} reply_jid={reply_jid} text={repr(text[:100])}", flush=True)
+
+    # Load conversation history from Redis (last 10 turns, TTL 30 min)
+    history_key = f"wa_chat_history:{phone}"
+    raw_history = await redis_client.get(history_key)
+    history: list[dict] = _json.loads(raw_history) if raw_history else []
+
     agent = SupportAgent()
     try:
-        result = await agent.run({"message": text, "user_role": "passenger", "context": {}, "history": []})
+        result = await agent.run({"message": text, "user_role": "passenger", "context": {}, "history": history})
         print(f"[SUPPORT] agent result success={result.success} data={result.data}", flush=True)
         reply = (result.data or {}).get("response") if result.data else None
     except Exception as exc:
@@ -309,6 +317,13 @@ async def _handle_support_message(phone: str, text: str, reply_jid: str | None =
             if is_heb
             else "Thank you for contacting us. A support agent will follow up shortly."
         )
+
+    # Save turn to history (keep last 10 turns = 20 messages)
+    history.append({"role": "user", "content": text})
+    history.append({"role": "assistant", "content": reply})
+    if len(history) > 20:
+        history = history[-20:]
+    await redis_client.set(history_key, _json.dumps(history, ensure_ascii=False), ex=1800)
 
     if reply_jid:
         await whatsapp_svc.send_text_to_jid(reply_jid, reply)

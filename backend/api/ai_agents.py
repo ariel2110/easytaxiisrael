@@ -86,6 +86,16 @@ AGENT_DEFS: list[dict[str, Any]] = [
         "base_url": "https://api.moonshot.cn/v1/chat/completions",
         "provider": "openai_compat",
     },
+    {
+        "id": "dispatch",
+        "name": "Dispatch Agent",
+        "icon": "🚗",
+        "models": ["deepseek-chat"],
+        "default_model": "deepseek-chat",
+        "key_field": "DEEPSEEK_API_KEY",
+        "base_url": "https://api.deepseek.com/v1/chat/completions",
+        "provider": "openai_compat",
+    },
 ]
 
 

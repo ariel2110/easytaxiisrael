@@ -1,5 +1,5 @@
 """
-Matching & Dispatch Agent — Grok / Llama (via Groq)
+Matching & Dispatch Agent — DeepSeek Chat
 Fast LLM for optimal driver selection.
 Considers proximity, rating, acceptance rate, hours worked, and
 dropoff zone return probability to maximise driver earnings.
@@ -55,10 +55,10 @@ class DispatchAgent(BaseAgent):
             else:
                 d["distance_km"] = 999.0
 
-        # Attempt LLM-based smart match (Groq is fast enough for real-time)
+        # Attempt LLM-based smart match (DeepSeek — OpenAI-compatible, fast & cheap)
         data = await self._llm_match(payload, drivers)
         if data:
-            return AgentResult(True, data, model_used="groq-llama3")
+            return AgentResult(True, data, model_used="deepseek-chat")
 
         # Weighted score fallback
         data = self._score_match(drivers)
@@ -90,9 +90,9 @@ Also consider: will the driver likely get a return ride from the dropoff zone?
 Return JSON only:
 {{"driver_id": "<id>", "score": 0.0-1.0, "reasoning": "<one sentence>"}}"""
 
-        raw = await self._call_groq(
+        raw = await self._call_deepseek(
             messages=[{"role": "user", "content": prompt}],
-            model="llama-3.1-70b-versatile",
+            model="deepseek-chat",
             json_mode=True,
         )
         if not raw:

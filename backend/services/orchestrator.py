@@ -84,14 +84,52 @@ async def _load_active_drivers(db: AsyncSession) -> list[dict]:
         loc_result = await db.execute(loc_stmt)
         loc = loc_result.scalar_one_or_none()
 
+        # Fetch real driver stats from ratings + rides tables
+        from services.rating import get_driver_stats
+        from models.ride import Ride, RideStatus as RS
+        from datetime import date, timedelta
+        from sqlalchemy import func as sqlfunc
+
+        stats = await get_driver_stats(db, d.id)
+        real_rating = stats.average_score if stats.average_score else 4.5
+
+        # Acceptance rate: accepted / (accepted + rejected) in last 30 days
+        cutoff = date.today() - timedelta(days=30)
+        acc_stmt = select(
+            sqlfunc.count(Ride.id).filter(Ride.status.in_([RS.accepted, RS.in_progress, RS.completed])),
+            sqlfunc.count(Ride.id),
+        ).where(
+            Ride.driver_id == d.id,
+            Ride.created_at >= cutoff,
+        )
+        acc_res = await db.execute(acc_stmt)
+        accepted_count, total_count = acc_res.one()
+        real_acceptance_rate = (accepted_count / total_count) if total_count > 0 else 0.85
+
+        # Hours today: sum durations of completed rides today
+        today_start = date.today()
+        hours_stmt = select(
+            sqlfunc.sum(
+                sqlfunc.extract("epoch", Ride.completed_at - Ride.started_at) / 3600
+            )
+        ).where(
+            Ride.driver_id == d.id,
+            Ride.status == RS.completed,
+            Ride.started_at >= today_start,
+            Ride.started_at.isnot(None),
+            Ride.completed_at.isnot(None),
+        )
+        hours_res = await db.execute(hours_stmt)
+        real_hours_today = float(hours_res.scalar() or 0.0)
+
         output.append({
             "id": str(d.id),
             "lat": loc.lat if loc else None,
             "lng": loc.lng if loc else None,
             "device_token": d.device_token,
-            "rating": 4.5,          # TODO: pull from ratings aggregate
-            "acceptance_rate": 0.85, # TODO: pull from stats
-            "hours_today": 0.0,      # TODO: pull from ride history
+            "rating": real_rating,
+            "acceptance_rate": real_acceptance_rate,
+            "hours_today": real_hours_today,
             "hours_week": 0.0,
         })
     return output

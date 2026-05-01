@@ -12,6 +12,11 @@ const NAV = [
   { to: '/admin/audit',   label: 'יומן',    icon: '📋', end: false },
   { to: '/admin/sumsub',  label: 'KYC',     icon: '🪪', end: false },
   { to: '/admin/ai-agents', label: 'סוכני AI', icon: '🤖', end: false },
+  { to: '/admin/control', label: 'מרכז שליטה', icon: '🛡️', end: false },
+  { to: '/admin/report',  label: 'דוח יומי AI', icon: '📈', end: false },
+  { to: '/admin/handbook', label: 'מדריך',   icon: '📖', end: false },
+  { to: '/admin/demo',    label: 'דמו',      icon: '🎭', end: false },
+  { to: '/admin/leads',   label: 'לידים',    icon: '📋', end: false },
 ]
 
 const NAV_EXTERNAL = [

@@ -6,7 +6,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -20,6 +20,8 @@ class LeadStatus(str, enum.Enum):
     qualified = "qualified"
     converted = "converted"
     rejected = "rejected"
+    approved = "approved"   # approved for WhatsApp send
+    sent = "sent"           # WA message sent
 
 
 class LeadSource(str, enum.Enum):
@@ -27,6 +29,7 @@ class LeadSource(str, enum.Enum):
     referral = "referral"
     campaign = "campaign"
     manual = "manual"
+    google_places = "google_places"
 
 
 class CampaignStatus(str, enum.Enum):
@@ -40,7 +43,7 @@ class Lead(Base):
     __tablename__ = "leads"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    phone: Mapped[str] = mapped_column(String(20), nullable=False, unique=True, index=True)
+    phone: Mapped[str] = mapped_column(String(60), nullable=False, unique=True, index=True)
     name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     source: Mapped[LeadSource] = mapped_column(Enum(LeadSource), nullable=False, default=LeadSource.organic)
     status: Mapped[LeadStatus] = mapped_column(Enum(LeadStatus), nullable=False, default=LeadStatus.new, index=True)
@@ -50,6 +53,17 @@ class Lead(Base):
     last_contacted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # ── New columns for driver leads board ────────────────────────────────────
+    whatsapp_capable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    message_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    area: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    business_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    google_place_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    website: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
 class Campaign(Base):
