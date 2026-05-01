@@ -82,6 +82,7 @@ class Settings(BaseSettings):
     GREENINVOICE_API_ID: str = ""
     GREENINVOICE_API_SECRET: str = ""
     GREENINVOICE_API_URL: str = "https://api.greeninvoice.co.il/api/v1"
+    GREENINVOICE_WEBHOOK_SECRET: str = ""   # used to verify incoming webhook HMAC
     # Business details for invoice sender (your company)
     GREENINVOICE_BUSINESS_NAME: str = "EasyTaxi Israel"
     GREENINVOICE_BUSINESS_TAX_ID: str = ""    # ח.פ שלך

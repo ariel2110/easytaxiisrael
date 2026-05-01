@@ -15,6 +15,7 @@ from api.health import router as health_router
 from api.legal import router as legal_router, tos_router
 from api.passenger_wallet import router as passenger_wallet_router
 from api.payments import router as payments_router
+from api.webhooks_greeninvoice import router as greeninvoice_webhook_router
 from api.persona import router as persona_router
 from api.rideshare import router as rideshare_router
 from api.vehicle import router as vehicle_router
@@ -100,6 +101,7 @@ app.include_router(rides_router)
 app.include_router(tracking_router)
 app.include_router(payments_router)
 app.include_router(passenger_wallet_router)
+app.include_router(greeninvoice_webhook_router)
 app.include_router(ai_router)
 app.include_router(ai_agents_router)
 app.include_router(compliance_router)
