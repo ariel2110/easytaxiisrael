@@ -169,9 +169,15 @@ async def _handle_auth_message(phone: str, text: str, db: AsyncSession, msg_id: 
     if "|" not in text:
         return False
 
-    # Extract token — format: "🔐 EasyTaxi: אמת אותי | <token>"
+    # Extract token — supports both formats:
+    #   new: "🔐 EasyTaxi: אמת אותי | [abc12345] (מ.פ.ז)"
+    #   legacy: "🔐 EasyTaxi: אמת אותי | abc12345"
     try:
-        token = text.split("|")[-1].strip()
+        raw_token = text.split("|")[-1].strip()
+        if raw_token.startswith("[") and "]" in raw_token:
+            token = raw_token[1:raw_token.index("]")]
+        else:
+            token = raw_token  # legacy format — backward compatible
     except Exception:
         print(f"[AUTH-DEBUG] malformed auth message: {repr(text[:100])}", flush=True)
         return True  # was an auth message but malformed
@@ -183,18 +189,36 @@ async def _handle_auth_message(phone: str, text: str, db: AsyncSession, msg_id: 
         await whatsapp_svc.send_text(
             phone,
             "⏰ *קישור האימות פג תוקף*\n\n"
-            "הקישורים תקפים ל-10 דקות בלבד.\n"
+            "הקישורים תקפים ל-15 דקות בלבד.\n"
             "לחץ כאן כדי לבקש קישור חדש:\n"
             "🔗 https://easytaxiisrael.com/login\n\n"
-            "לעזרה: https://wa.me/447474775344",
+            "💬 _שאלות? תמיד ניתן לשלוח הודעה כאן — אנחנו זמינים!_",
         )
         return True
 
     stored_phone, role = result
-    # Note: we do NOT validate sender phone vs stored_phone here.
-    # For @lid (WA linked device) JIDs Evolution API may report the platform's own
-    # number as sender instead of the real user phone. The token itself is the
-    # security proof — it is a one-time unguessable hex value with a 5-minute TTL.
+
+    # ── Phone number verification ────────────────────────────────────────────
+    # Compare the sender's number with the one stored in the session.
+    # @lid JIDs (Evolution API linked-device) cannot be resolved here — skip check.
+    # The token itself is a cryptographic single-use secret, so this is a defence-
+    # in-depth measure, not the primary security control.
+    from core.security import normalize_phone as _norm_phone
+    is_lid = phone.endswith("@lid") or not phone.replace("+", "").isdigit()
+    if not is_lid and _norm_phone(phone) != stored_phone:
+        print(
+            f"[AUTH-SECURITY] phone mismatch: sender={_norm_phone(phone)} stored={stored_phone}",
+            flush=True,
+        )
+        await whatsapp_svc.send_text(
+            phone,
+            "⚠️ *שגיאת אימות — מספר לא תואם*\n\n"
+            "ההודעה נשלחה ממספר שונה מזה שהוזן בטופס ההרשמה.\n\n"
+            "אנא ודא שאתה שולח מהמספר שהזנת ונסה שוב:\n"
+            "🔗 https://easytaxiisrael.com/login\n\n"
+            "💬 _יש בעיה? שלח הודעה כאן ונעזור לך._",
+        )
+        return True
 
     # Find or create user
     res = await db.execute(select(User).where(User.phone == stored_phone))
@@ -252,21 +276,39 @@ async def _handle_auth_message(phone: str, text: str, db: AsyncSession, msg_id: 
             if kyc_url:
                 await whatsapp_svc.send_text(
                     phone,
-                    f"✅ *אומת בהצלחה!*\n\n"
-                    f"שלב אחרון לפני שמתחילים לנסוע — אימות זהות מהיר (כ-2 דקות).\n"
-                    f"תצטרך: תעודת זהות או דרכון + צילום פנים (סלפי).\n\n"
+                    f"👋 *נהג יקר, תודה על הרשמתך ל-EasyTaxi!*\n\n"
+                    f"✅ אימות הוואטסאפ הושלם בהצלחה.\n"
+                    f"האימות שלך בתהליך — נא להיכנס לקישור להמשך תהליך ההרשמה:\n\n"
                     f"🔗 {kyc_url}\n\n"
-                    f"לאחר האישור תוכל לחזור לדשבורד הנהג:\n"
-                    f"🚗 https://driver.easytaxiisrael.com\n\n"
-                    f"_לתמיכה: https://wa.me/447474775344_",
+                    f"━━━━━━━━━━━━━━\n"
+                    f"📋 *שלבי ההצטרפות:*\n"
+                    f"1️⃣ ✅ אימות וואטסאפ — הושלם\n"
+                    f"2️⃣ 🔄 אימות זהות (ת.ז/דרכון + סלפי) — כ-2 דקות\n"
+                    f"3️⃣ ⏳ בדיקת מסמכים ע\"י המערכת\n"
+                    f"4️⃣ 🚗 התחלת קבלת נסיעות!\n"
+                    f"━━━━━━━━━━━━━━\n\n"
+                    f"📎 *קישורים חשובים:*\n"
+                    f"🚗 דשבורד נהג: https://driver.easytaxiisrael.com\n"
+                    f"❓ שאלות נפוצות: https://easytaxiisrael.com/faq\n\n"
+                    f"💬 _שאלות? פרטים? ניתן לשלוח הודעה כאן ישירות — נשמח לעזור!_\n"
+                    f"_EasyTaxi Israel — מצרפים אותך לצוות_ 🚕",
                 )
             else:
                 await whatsapp_svc.send_text(
                     phone,
-                    "✅ *אומת בהצלחה!*\n\n"
-                    "כדי להשלים הרשמה ולהגדיר את הרכב שלך, היכנס לדשבורד הנהג:\n"
-                    "🚗 https://driver.easytaxiisrael.com\n\n"
-                    "_לתמיכה: https://wa.me/447474775344_",
+                    "👋 *נהג יקר, תודה על הרשמתך ל-EasyTaxi!*\n\n"
+                    "✅ אימות הוואטסאפ הושלם בהצלחה.\n\n"
+                    "🚗 כדי להתחיל, היכנס לדשבורד הנהג:\n"
+                    "https://driver.easytaxiisrael.com\n\n"
+                    "━━━━━━━━━━━━━━\n"
+                    "📋 *שלבי ההצטרפות:*\n"
+                    "1️⃣ ✅ אימות וואטסאפ — הושלם\n"
+                    "2️⃣ 📄 השלמת פרטי רכב ומסמכים\n"
+                    "3️⃣ ✅ אישור ע\"י המערכת\n"
+                    "4️⃣ 🚗 התחלת קבלת נסיעות!\n"
+                    "━━━━━━━━━━━━━━\n\n"
+                    "💬 _שאלות? פרטים? ניתן לשלוח הודעה כאן ישירות — נשמח לעזור!_\n"
+                    "_EasyTaxi Israel — מצרפים אותך לצוות_ 🚕",
                 )
         else:
             # Passenger: immediately approved after WhatsApp
@@ -274,11 +316,16 @@ async def _handle_auth_message(phone: str, text: str, db: AsyncSession, msg_id: 
             await db.commit()
             await whatsapp_svc.send_text(
                 phone,
-                "✅ *האימות הצליח!*\n\n"
-                "ברוך הבא ל-EasyTaxi ישראל 🚕\n\n"
-                "חזור לדפדפן — הדף כבר מתעדכן אוטומטית ויכניס אותך.\n\n"
-                "לא רואה? לחץ כאן:\n"
-                "👉 https://easytaxiisrael.com/app\n\n"
+                "🎉 *ברוך הבא ל-EasyTaxi ישראל!*\n\n"
+                "✅ האימות הצליח בהצלחה — הדף כבר מתעדכן אוטומטית.\n"
+                "ניתן לחזור לדפדפן כעת 👆\n\n"
+                "━━━━━━━━━━━━━━\n"
+                "📱 *קישורים שימושיים:*\n"
+                "🚕 הזמן נסיעה: https://easytaxiisrael.com/app\n"
+                "❓ שאלות נפוצות: https://easytaxiisrael.com/faq\n"
+                "👤 החשבון שלי: https://easytaxiisrael.com/app\n"
+                "━━━━━━━━━━━━━━\n\n"
+                "💬 *יש שאלה? תמיד ניתן לשלוח הודעה כאן — אנחנו זמינים!* 😊\n"
                 "_EasyTaxi Israel — מהיר, בטוח, ללא סיסמא_ 🚕",
             )
     else:

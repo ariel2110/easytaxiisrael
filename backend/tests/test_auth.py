@@ -397,7 +397,12 @@ class TestWaAuth:
         link = data["whatsapp_link"]
         qs = urllib.parse.parse_qs(urllib.parse.urlparse(link).query)
         message = qs.get("text", [""])[0]
-        token = message.split("|")[-1].strip()
+        raw_token = message.split("|")[-1].strip()
+        # Handle new format: "[abc12345] (מ.פ.ז)" or legacy: "abc12345"
+        if raw_token.startswith("[") and "]" in raw_token:
+            token = raw_token[1:raw_token.index("]")]
+        else:
+            token = raw_token
 
         # Create a user to complete the session
         user = User(phone="972546100100", role=UserRole.passenger)

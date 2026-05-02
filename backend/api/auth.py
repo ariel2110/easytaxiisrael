@@ -83,7 +83,8 @@ async def request_wa_auth(body: WAAuthRequest) -> WAAuthLinkResponse:
     session_id, token = await create_wa_auth_session(body.phone, body.role.value)
 
     # The message the user will send to the platform's WhatsApp
-    auth_message = f"{WA_AUTH_MESSAGE_PREFIX} אמת אותי | {token}"
+    # Token wrapped in brackets with internal-code label for easy visual identification
+    auth_message = f"{WA_AUTH_MESSAGE_PREFIX} אמת אותי | [{token}] (מ.פ.ז)"
 
     # wa.me deep link that pre-populates the message
     import urllib.parse

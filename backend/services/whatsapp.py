@@ -177,8 +177,9 @@ async def send_otp(phone: str, otp: str) -> bool:
         )
     msg = (
         f"🚕 *EasyTaxi Israel*\n\n"
-        f"קוד האימות שלך: *{otp}*\n\n"
-        f"תקף ל-5 דקות. אל תשתף אותו עם אף אחד."
+        f"קוד האימות שלך: *[{otp}]*\n"
+        f"_(מ.פ.ז — מספר פנימי זמני, תקף ל-5 דקות)_\n\n"
+        f"אל תשתף קוד זה עם אף אחד."
     )
     return await send_text(phone, msg)
 

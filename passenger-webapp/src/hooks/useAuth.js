@@ -71,9 +71,9 @@ export function useAuth() {
             }
             catch { /* network hiccup — keep polling */ }
         }
-        // Start polling every 3s
+        // Start polling every 1.5s — fast response when user returns from WA
         _stopPolling();
-        pollRef.current = setInterval(doPoll, 3000);
+        pollRef.current = setInterval(doPoll, 1500);
         // Poll immediately when tab becomes visible (user returns from WA app on mobile)
         function onVisible() {
             if (document.visibilityState === 'visible')
