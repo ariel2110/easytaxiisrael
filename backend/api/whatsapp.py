@@ -250,66 +250,32 @@ async def _handle_auth_message(phone: str, text: str, db: AsyncSession, msg_id: 
             user.last_wa_msg_id = msg_id
 
         if user.role == UserRole.driver:
-            # Driver: create Persona inquiry immediately and send KYC link via WhatsApp
-            from services import persona as persona_svc
-            from core.config import settings as _settings
-            kyc_url: str | None = None
-            if _settings.PERSONA_API_KEY and _settings.PERSONA_TEMPLATE_ID:
-                try:
-                    inquiry = await persona_svc.create_inquiry(db, user.id)
-                    # Include session-token for seamless hosted flow (no re-auth on Persona side)
-                    if inquiry.session_token:
-                        kyc_url = (
-                            f"https://withpersona.com/verify"
-                            f"?inquiry-id={inquiry.persona_inquiry_id}"
-                            f"&session-token={inquiry.session_token}"
-                        )
-                    else:
-                        kyc_url = f"https://withpersona.com/verify?inquiry-id={inquiry.persona_inquiry_id}"
-                    user.auth_status = AuthStatus.persona_in_progress
-                except Exception:
-                    user.auth_status = AuthStatus.whatsapp_verified
-            else:
-                user.auth_status = AuthStatus.whatsapp_verified
+            # Driver: WhatsApp verified — send Sumsub KYC link (license + selfie only)
+            user.auth_status = AuthStatus.whatsapp_verified
             await db.commit()
 
-            if kyc_url:
-                await whatsapp_svc.send_text(
-                    phone,
-                    f"👋 *נהג יקר, תודה על הרשמתך ל-EasyTaxi!*\n\n"
-                    f"✅ אימות הוואטסאפ הושלם בהצלחה.\n"
-                    f"האימות שלך בתהליך — נא להיכנס לקישור להמשך תהליך ההרשמה:\n\n"
-                    f"🔗 {kyc_url}\n\n"
-                    f"━━━━━━━━━━━━━━\n"
-                    f"📋 *שלבי ההצטרפות:*\n"
-                    f"1️⃣ ✅ אימות וואטסאפ — הושלם\n"
-                    f"2️⃣ 🔄 אימות זהות (ת.ז/דרכון + סלפי) — כ-2 דקות\n"
-                    f"3️⃣ ⏳ בדיקת מסמכים ע\"י המערכת\n"
-                    f"4️⃣ 🚗 התחלת קבלת נסיעות!\n"
-                    f"━━━━━━━━━━━━━━\n\n"
-                    f"📎 *קישורים חשובים:*\n"
-                    f"🚗 דשבורד נהג: https://driver.easytaxiisrael.com\n"
-                    f"❓ שאלות נפוצות: https://easytaxiisrael.com/faq\n\n"
-                    f"💬 _שאלות? פרטים? ניתן לשלוח הודעה כאן ישירות — נשמח לעזור!_\n"
-                    f"_EasyTaxi Israel — מצרפים אותך לצוות_ 🚕",
-                )
-            else:
-                await whatsapp_svc.send_text(
-                    phone,
-                    "👋 *נהג יקר, תודה על הרשמתך ל-EasyTaxi!*\n\n"
-                    "✅ אימות הוואטסאפ הושלם בהצלחה.\n\n"
-                    "🚗 כדי להתחיל, היכנס לדשבורד הנהג:\n"
-                    "https://driver.easytaxiisrael.com\n\n"
-                    "━━━━━━━━━━━━━━\n"
-                    "📋 *שלבי ההצטרפות:*\n"
-                    "1️⃣ ✅ אימות וואטסאפ — הושלם\n"
-                    "2️⃣ 📄 השלמת פרטי רכב ומסמכים\n"
-                    "3️⃣ ✅ אישור ע\"י המערכת\n"
-                    "4️⃣ 🚗 התחלת קבלת נסיעות!\n"
-                    "━━━━━━━━━━━━━━\n\n"
-                    "💬 _שאלות? פרטים? ניתן לשלוח הודעה כאן ישירות — נשמח לעזור!_\n"
-                    "_EasyTaxi Israel — מצרפים אותך לצוות_ 🚕",
-                )
+            # Build Sumsub KYC URL for the driver dashboard
+            kyc_url = f"https://driver.easytaxiisrael.com/verify"
+
+            await whatsapp_svc.send_text(
+                phone,
+                f"👋 *נהג יקר, תודה על הרשמתך ל-EasyTaxi!*\n\n"
+                f"✅ אימות הוואטסאפ הושלם בהצלחה.\n"
+                f"נא להיכנס לקישור להמשך תהליך ההרשמה ואימות הזהות:\n\n"
+                f"🔗 {kyc_url}\n\n"
+                f"━━━━━━━━━━━━━━\n"
+                f"📋 *שלבי ההצטרפות:*\n"
+                f"1️⃣ ✅ אימות וואטסאפ — הושלם\n"
+                f"2️⃣ 🔄 אימות זהות: רישיון נהיגה + סלפי — כ-2 דקות\n"
+                f"3️⃣ ⏳ בדיקת מסמכים ע\"י המערכת\n"
+                f"4️⃣ 🚗 התחלת קבלת נסיעות!\n"
+                f"━━━━━━━━━━━━━━\n\n"
+                f"📎 *קישורים חשובים:*\n"
+                f"🚗 דשבורד נהג: https://driver.easytaxiisrael.com\n"
+                f"❓ שאלות נפוצות: https://easytaxiisrael.com/faq\n\n"
+                f"💬 _שאלות? פרטים? ניתן לשלוח הודעה כאן ישירות — נשמח לעזור!_\n"
+                f"_EasyTaxi Israel — מצרפים אותך לצוות_ 🚕",
+            )
         else:
             # Passenger: immediately approved after WhatsApp
             user.auth_status = AuthStatus.approved

@@ -35,7 +35,6 @@ from schemas.auth import (
     WAAuthRequest,
 )
 from security.audit import audit
-from services import persona as persona_svc
 from services import whatsapp as whatsapp_svc
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -139,12 +138,12 @@ async def poll_wa_auth(
                 user.auth_status = AuthStatus.approved
                 await db.commit()
             elif user.role == UserRole.driver and user.auth_status == AuthStatus.pending:
-                user.auth_status = AuthStatus.persona_in_progress
+                user.auth_status = AuthStatus.whatsapp_verified
                 await db.commit()
     except Exception:
         pass
     if result.get("role") == UserRole.driver.value:
-        kyc_url = "/verify"  # frontend Sumsub WebSDK page
+        kyc_url = "/verify"  # frontend Sumsub WebSDK page (license + selfie)
 
     return WAAuthPollResponse(
         status="completed",
@@ -226,9 +225,9 @@ async def verify_otp_and_login(
             await db.commit()
     elif user.role == UserRole.driver:
         if user.auth_status == AuthStatus.pending:
-            user.auth_status = AuthStatus.persona_in_progress
+            user.auth_status = AuthStatus.whatsapp_verified
             await db.commit()
-        kyc_url = "/verify"  # frontend Sumsub WebSDK page
+        kyc_url = "/verify"  # frontend Sumsub WebSDK page (license + selfie)
 
     return TokenResponse(
         access_token=access,
