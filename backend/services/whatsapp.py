@@ -262,6 +262,41 @@ async def notify_driver_new_ride(driver_phone: str, ride_id: str, pickup: str) -
 # Meta Cloud API — phone number info
 # ══════════════════════════════════════════════════════════════════════════════
 
+async def download_meta_media(media_id: str) -> bytes | None:
+    """
+    Download a media file from Meta Cloud API by its media ID.
+    Returns raw bytes on success, None on failure.
+    Step 1: GET /{version}/{media_id} → obtain download URL.
+    Step 2: GET download URL with Bearer token → file bytes.
+    """
+    if not _meta_enabled():
+        return None
+    try:
+        ver  = settings.WHATSAPP_API_VERSION
+        hdrs = _meta_headers()
+        async with httpx.AsyncClient(timeout=30) as client:
+            # Step 1 — resolve media URL
+            r = await client.get(
+                f"https://graph.facebook.com/{ver}/{media_id}",
+                headers=hdrs,
+            )
+            if r.status_code != 200:
+                logger.warning("Meta media URL fetch failed: %s %s", r.status_code, r.text[:100])
+                return None
+            dl_url = r.json().get("url")
+            if not dl_url:
+                return None
+            # Step 2 — download file
+            r2 = await client.get(dl_url, headers=hdrs)
+            if r2.status_code != 200:
+                logger.warning("Meta media download failed: %s", r2.status_code)
+                return None
+            return r2.content
+    except Exception as exc:
+        logger.warning("download_meta_media failed: %s", exc)
+        return None
+
+
 async def meta_get_phone_info() -> dict | None:
     """Return Meta phone number registration info (display_phone_number, verified_name, quality)."""
     if not _meta_enabled():

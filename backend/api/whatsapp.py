@@ -344,6 +344,78 @@ async def _handle_support_message(phone: str, text: str, reply_jid: str | None =
         await whatsapp_svc.send_text(phone, reply)
 
 
+async def _handle_kyc_image_meta(phone: str, msg: dict, db: AsyncSession) -> bool:
+    """
+    Handle an image/document sent via Meta Cloud API.
+    Returns True if the image was consumed by the KYC doc-collection flow.
+    """
+    from services import wa_kyc_flow
+
+    # Quick state check before downloading (saves a network call if not in collection)
+    if not await wa_kyc_flow.is_in_collection(phone):
+        return False
+
+    # Resolve media object — Meta puts the id in msg["image"]["id"] or msg["document"]["id"]
+    media_obj = (
+        msg.get("image")
+        or msg.get("document")
+        or msg.get("video")
+        or {}
+    )
+    media_id  = media_obj.get("id")
+    mime_type = media_obj.get("mime_type", "image/jpeg")
+
+    if not media_id:
+        return False
+
+    from services.whatsapp import download_meta_media, send_text
+    image_bytes = await download_meta_media(media_id)
+    if not image_bytes:
+        await send_text(phone, "⚠️ לא הצלחנו לפתוח את התמונה. נסה/י לשלוח שוב.")
+        return True  # was in KYC flow, consumed
+
+    return await wa_kyc_flow.handle_wa_image(db, phone, image_bytes, mime_type)
+
+
+async def _handle_kyc_image_evolution(
+    phone: str,
+    img_data: dict,
+    msg_obj: dict,
+    db: AsyncSession,
+) -> bool:
+    """
+    Handle an image/document sent via Evolution API.
+    Evolution often includes base64-encoded media directly in the webhook payload.
+    Returns True if the image was consumed by the KYC flow.
+    """
+    from services import wa_kyc_flow
+
+    if not await wa_kyc_flow.is_in_collection(phone):
+        return False
+
+    import base64 as _b64
+
+    # Evolution may provide base64 directly or a download URL
+    b64_data = msg_obj.get("base64") or img_data.get("base64")
+    if b64_data:
+        # Strip data-URI prefix if present (data:image/jpeg;base64,...)
+        if "," in b64_data:
+            b64_data = b64_data.split(",", 1)[1]
+        try:
+            image_bytes = _b64.b64decode(b64_data)
+        except Exception:
+            image_bytes = None
+    else:
+        image_bytes = None
+
+    if not image_bytes:
+        logger.warning("[wa_kyc] evolution image: no base64 available for phone=%s", phone)
+        return False
+
+    mime_type = img_data.get("mimetype", "image/jpeg")
+    return await wa_kyc_flow.handle_wa_image(db, phone, image_bytes, mime_type)
+
+
 # ── Meta Cloud API webhook verification ─────────────────────────────────────
 
 @router.get(
@@ -424,6 +496,12 @@ async def _handle_meta_webhook(payload: dict, db: AsyncSession) -> dict:
                         msg.get("interactive", {}).get("button_reply", {}).get("id", "")
                         or msg.get("interactive", {}).get("list_reply", {}).get("id", "")
                     )
+                elif msg_type in ("image", "document", "video"):
+                    # KYC document upload via WhatsApp
+                    handled = await _handle_kyc_image_meta(from_phone, msg, db)
+                    if handled:
+                        continue  # image was consumed by KYC flow
+                    text = ""
                 else:
                     text = ""
 
@@ -510,11 +588,16 @@ async def _handle_evolution_webhook(payload: dict, db: AsyncSession) -> dict:
         print(f"[WH-DEBUG] from={phone} reply_jid={reply_jid} jid={remote_jid} text={repr(text[:200])}", flush=True)
         logger.info("📨 WhatsApp incoming | from=%s | text=%s", phone, text[:120])
 
-        # Try to handle as auth message first; if not auth, pass to support bot
+        # Try to handle as auth message first; if not auth, try KYC image, then support bot
         if text:
             is_auth = await _handle_auth_message(phone, text, db, msg_id)
             if not is_auth:
                 await _handle_support_message(phone, text, reply_jid=reply_jid)
+        else:
+            # No text — check for image (Evolution API imageMessage)
+            img_data = msg_obj.get("imageMessage") or msg_obj.get("documentMessage")
+            if img_data:
+                await _handle_kyc_image_evolution(phone, img_data, msg_obj, db)
 
     elif event_lower in ("connection.update",):
         state = data.get("state", "")

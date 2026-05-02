@@ -107,13 +107,15 @@ class KYCReviewerAgent(BaseAgent):
     async def run(self, payload: dict) -> AgentResult:
         """
         payload:
-          driver_type:   str           "rideshare" | "licensed_taxi"
-          documents:     dict          {doc_type: agent1_result_dict, ...}
-          application_id: str          for logging
+          driver_type:      str   "rideshare" | "licensed_taxi"
+          documents:        dict  {doc_type: agent1_result_dict, ...}
+          application_id:   str  for logging
+          sumsub_verified:  dict  optional — Sumsub identity to cross-validate against
         """
         driver_type = payload.get("driver_type", "rideshare")
         documents = payload.get("documents", {})
         app_id = payload.get("application_id", "?")
+        sumsub_verified = payload.get("sumsub_verified")
 
         # Check required documents are present
         required = _TAXI_REQUIRED if driver_type == "licensed_taxi" else _RIDESHARE_REQUIRED
@@ -135,7 +137,7 @@ class KYCReviewerAgent(BaseAgent):
                 model_used="none",
             )
 
-        prompt = self._build_prompt(driver_type, documents)
+        prompt = self._build_prompt(driver_type, documents, sumsub_verified)
         raw = await self._call_anthropic(
             system=_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
@@ -168,15 +170,40 @@ class KYCReviewerAgent(BaseAgent):
 
         return AgentResult(success, result, raw=raw, model_used="claude-haiku-4-5")
 
-    def _build_prompt(self, driver_type: str, documents: dict) -> str:
+    def _build_prompt(
+        self,
+        driver_type: str,
+        documents: dict,
+        sumsub_verified: dict | None = None,
+    ) -> str:
         today = date.today().isoformat()
         docs_json = json.dumps(documents, ensure_ascii=False, indent=2)
 
-        return (
+        required_note = (
+            "all documents including professional license, taxi badge, inspection, medical"
+            if driver_type == "licensed_taxi"
+            else "vehicle insurance (paid transport coverage required), police clearance, vehicle registration"
+        )
+
+        prompt = (
             f"Today's date: {today}\n"
             f"Driver type: {driver_type}\n"
-            f"Required for this driver type: "
-            f"{'all documents including professional license, taxi badge, inspection, medical' if driver_type == 'licensed_taxi' else 'govt ID, driving license B+, vehicle registration, insurance with paid transport coverage, police clearance, selfie'}\n\n"
+            f"Required documents for this driver type: {required_note}\n\n"
             f"Documents extracted by Agent 1:\n{docs_json}\n\n"
-            "Please review ALL documents for Israeli transport law compliance and return your verdict JSON."
         )
+
+        # Add Sumsub cross-validation block when available
+        if sumsub_verified and any(v for v in sumsub_verified.values() if v and v != "sumsub.com — verified driving_license + selfie"):
+            sv_json = json.dumps(sumsub_verified, ensure_ascii=False, indent=2)
+            prompt += (
+                f"SUMSUB VERIFIED IDENTITY (already verified via driving_license + selfie):\n"
+                f"{sv_json}\n\n"
+                "CRITICAL CROSS-VALIDATION REQUIREMENTS:\n"
+                "  1. Holder names on all documents MUST match the Sumsub verified_name\n"
+                "  2. ID/document numbers on police_clearance MUST match Sumsub id_number\n"
+                "  3. License class from documents must be consistent with Sumsub license_class\n"
+                "  4. If a name mismatch is found — add a blocking_issue with field=\"identity_mismatch\"\n\n"
+            )
+
+        prompt += "Please review ALL documents for Israeli transport law compliance and return your verdict JSON."
+        return prompt

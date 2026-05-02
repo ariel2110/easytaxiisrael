@@ -25,9 +25,11 @@ class DriverType(str, enum.Enum):
 class AuthStatus(str, enum.Enum):
     pending             = "pending"              # נרשם, טרם אימת
     whatsapp_verified   = "whatsapp_verified"    # אימת ב-WhatsApp
-    persona_in_progress = "persona_in_progress"  # KYC Persona בתהליך (נהגים)
-    persona_completed   = "persona_completed"    # Persona השלים — ממתין לאישור ידני
+    persona_in_progress = "persona_in_progress"  # KYC בתהליך (legacy)
+    docs_collecting     = "docs_collecting"      # Sumsub ✅ — מעלה מסמכים נוספים ב-WhatsApp
+    persona_completed   = "persona_completed"    # כל המסמכים אושרו — ממתין לאישור ידני
     approved            = "approved"             # מאושר לחלוטין
+    blocked             = "blocked"              # נחסם — נדחה על ידי Sumsub / סוכן AI
 
 
 class User(Base):

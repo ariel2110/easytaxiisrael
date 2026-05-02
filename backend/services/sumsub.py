@@ -196,6 +196,28 @@ async def get_applicant_info(sumsub_applicant_id: str) -> dict | None:
 
 # ── Webhook verification & processing ────────────────────────────────────────
 
+def _extract_identity(info: dict | None) -> dict:
+    """Extract key identity fields from a Sumsub applicant info response."""
+    if not info:
+        return {}
+    personal = info.get("info", {})
+    docs     = personal.get("idDocs", [])
+    first_doc = docs[0] if docs else {}
+
+    first_name = personal.get("firstName") or first_doc.get("firstName") or ""
+    last_name  = personal.get("lastName")  or first_doc.get("lastName")  or ""
+    full_name  = f"{first_name} {last_name}".strip() or None
+
+    return {
+        "full_name":     full_name,
+        "id_number":     first_doc.get("number"),
+        "dob":           personal.get("dob") or first_doc.get("dob"),
+        "license_class": first_doc.get("licenseClass") or personal.get("licenseClass"),
+        "license_expiry": first_doc.get("validUntil"),
+        "country":       first_doc.get("issuingCountry") or personal.get("country"),
+    }
+
+
 def verify_webhook_signature(payload_bytes: bytes, digest_header: str) -> bool:
     """Verify Sumsub webhook payload using HMAC-SHA1."""
     expected = hmac.new(
@@ -310,53 +332,66 @@ async def process_webhook(db: AsyncSession, payload: dict) -> None:
 
     if event_type in ("applicantReviewed", "applicantWorkflowCompleted"):
         if review_answer == "GREEN":
-            user.auth_status = AuthStatus.persona_completed
-            log.info("[sumsub] driver=%s APPROVED", user.id)
+            # ── Fetch Sumsub verified identity ────────────────────────────
+            sumsub_info  = await get_applicant_info(applicant.sumsub_applicant_id)
+            sumsub_data  = _extract_identity(sumsub_info)
+            driver_type  = "licensed_taxi" if applicant.level_name == LEVEL_TAXI else "rideshare"
+
+            # ── Start WhatsApp document collection flow ────────────────────
+            try:
+                from services import wa_kyc_flow
+                await wa_kyc_flow.start_doc_collection(db, user, driver_type, sumsub_data)
+                log.info("[sumsub] doc collection started for driver=%s type=%s", user.id, driver_type)
+            except Exception as exc:
+                log.error("[sumsub] start_doc_collection failed: %s", exc)
+                # Fallback: at minimum mark as whatsapp_verified so driver can proceed
+                user.auth_status = AuthStatus.whatsapp_verified
+                await db.commit()
+                from services import whatsapp as wa_fb
+                await wa_fb.send_text(
+                    user.phone,
+                    "✅ *אימות הזהות הצליח!*\n\n"
+                    "לחץ כאן להמשך: https://driver.easytaxiisrael.com/verify"
+                )
         elif review_answer == "RED":
             user.auth_status = AuthStatus.blocked
+            await db.commit()
             log.info("[sumsub] driver=%s REJECTED labels=%s", user.id, reject_labels)
-        await db.commit()
+            from services import whatsapp as wa
+            reasons = "\n".join(f"• {r}" for r in reject_labels) if reject_labels else "• בעיה במסמכים"
+            try:
+                await wa.send_text(
+                    user.phone,
+                    "❌ *הבקשה נדחתה על ידי Sumsub*\n\n"
+                    f"*סיבות:*\n{reasons}\n\n"
+                    "תוכל לנסות שוב — היכנס לאפליקציה ולחץ על 'נסה שוב'.",
+                )
+            except Exception as exc:
+                log.warning("[sumsub] RED WA notification failed: %s", exc)
 
     elif event_type in ("applicantReset", "applicantStepsReset"):
-        # Allow driver to re-verify — revert from blocked if previously blocked by sumsub
-        if user.auth_status == AuthStatus.blocked:
+        # Allow driver to re-verify — revert to whatsapp_verified if blocked
+        if user.auth_status in (AuthStatus.blocked, AuthStatus.docs_collecting):
             user.auth_status = AuthStatus.whatsapp_verified
             await db.commit()
         log.info("[sumsub] driver=%s applicant RESET — can re-verify", user.id)
-
-    # ── WhatsApp notification ─────────────────────────────────────────────
-    from services import whatsapp as wa
-    try:
-        if event_type in ("applicantReviewed", "applicantWorkflowCompleted"):
-            if review_answer == "GREEN":
-                msg = (
-                    "✅ *האימות שלך הושלם בהצלחה!*\n\n"
-                    "מסמכיך אומתו ואושרו. חשבונך פעיל ואתה יכול להתחיל לקבל נסיעות.\n"
-                    "ברוך הבא לצוות EasyTaxi! 🚕"
-                )
-            else:
-                reasons = "\n".join(f"• {r}" for r in reject_labels) if reject_labels else "• בעיה במסמכים"
-                msg = (
-                    "❌ *הבקשה נדחתה*\n\n"
-                    f"לצערנו לא ניתן לאשר את בקשתך בשלב זה.\n\n"
-                    f"*סיבות:*\n{reasons}\n\n"
-                    "תוכל לנסות שוב — היכנס לאפליקציה ולחץ על 'נסה שוב'."
-                )
-            await wa.send_text(user.phone, msg)
-
-        elif event_type in ("applicantReset", "applicantStepsReset"):
-            msg = (
+        try:
+            from services import whatsapp as wa
+            await wa.send_text(
+                user.phone,
                 "🔄 *תהליך האימות אופס*\n\n"
-                "תוכל לפתוח מחדש את תהליך האימות דרך האפליקציה."
+                "תוכל לפתוח מחדש את תהליך האימות דרך האפליקציה.",
             )
-            await wa.send_text(user.phone, msg)
+        except Exception as exc:
+            log.warning("[sumsub] reset WA notification failed: %s", exc)
 
-        elif event_type == "applicantOnHold":
-            msg = (
+    elif event_type == "applicantOnHold":
+        try:
+            from services import whatsapp as wa
+            await wa.send_text(
+                user.phone,
                 "🔒 *האימות שלך הועבר לבדיקה ידנית*\n\n"
-                "צוות Sumsub בוחן את המסמכים שלך. נעדכן אותך בקרוב."
+                "צוות Sumsub בוחן את המסמכים שלך. נעדכן אותך בקרוב.",
             )
-            await wa.send_text(user.phone, msg)
-
-    except Exception as exc:
-        log.warning("[sumsub] WhatsApp notification failed: %s", exc)
+        except Exception as exc:
+            log.warning("[sumsub] on_hold WA notification failed: %s", exc)
