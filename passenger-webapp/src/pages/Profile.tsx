@@ -193,6 +193,32 @@ export default function Profile() {
             </div>
           </div>
 
+          {/* Become a driver CTA — only for passengers */}
+          {user.role === 'passenger' && (
+            <div style={{
+              background: 'linear-gradient(135deg,rgba(34,197,94,.08) 0%,rgba(22,163,74,.04) 100%)',
+              border: '1px solid rgba(34,197,94,.2)', borderRadius: 14, padding: '18px 16px',
+            }}>
+              <div style={{ fontWeight: 800, fontSize: '1rem', marginBottom: 6, color: '#F1F5F9' }}>
+                🚗 הפוך לנהג שיתופי!
+              </div>
+              <div style={{ fontSize: '.82rem', color: '#94A3B8', lineHeight: 1.65, marginBottom: 14 }}>
+                חוק שיתוף הנסיעות (חוק הובר) בדרך!<br />
+                הגש בקשה עכשיו, קבל אישור מראש — ותתחיל לנהוג מהיום הראשון.
+              </div>
+              <button
+                onClick={() => navigate('/become-driver')}
+                style={{
+                  width: '100%', padding: '11px', borderRadius: 10, border: 'none',
+                  background: 'linear-gradient(135deg,#22C55E,#16A34A)', color: '#fff',
+                  fontFamily: "'Heebo','Segoe UI',sans-serif", fontWeight: 800, fontSize: '.9rem',
+                  cursor: 'pointer', boxShadow: '0 3px 14px rgba(34,197,94,.3)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                }}
+              >הצטרף כנהג ←</button>
+            </div>
+          )}
+
           {/* Actions */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <a

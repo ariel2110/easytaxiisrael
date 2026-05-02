@@ -17,6 +17,7 @@ import Handbook from './pages/Handbook'
 import DemoReport from './pages/DemoReport'
 import Leads from './pages/Leads'
 import PendingApprovals from './pages/PendingApprovals'
+import DriverApplications from './pages/DriverApplications'
 
 function AdminLayout() {
   const { user, loading, logout } = useAuth()
@@ -56,6 +57,7 @@ function AdminLayout() {
             <Route path="demo" element={<DemoReport />} />
             <Route path="leads" element={<Leads />} />
             <Route path="pending" element={<PendingApprovals />} />
+            <Route path="driver-applications" element={<DriverApplications />} />
             <Route path="*" element={<Navigate to="/admin/" replace />} />
           </Routes>
         </div>

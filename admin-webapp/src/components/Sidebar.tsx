@@ -9,6 +9,7 @@ interface Props {
 const NAV = [
   { to: '/admin/', label: 'סקירה',    icon: '📊', end: true },
   { to: '/admin/pending', label: 'ממתין לאישור', icon: '⏳', end: false, badge: true },
+  { to: '/admin/driver-applications', label: 'חוק הובר — נהגים', icon: '🚗🆕', end: false },
   { to: '/admin/drivers', label: 'נהגים',  icon: '🚗', end: false },
   { to: '/admin/users',   label: 'משתמשים', icon: '👥', end: false },
   { to: '/admin/rides',   label: 'נסיעות',  icon: '🛣️', end: false },

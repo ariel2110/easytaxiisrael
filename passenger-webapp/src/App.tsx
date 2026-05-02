@@ -14,6 +14,7 @@ import FAQ from './pages/FAQ'
 import Profile from './pages/Profile'
 import KYCVerification from './pages/KYCVerification'
 import Wallet from './pages/Wallet'
+import BecomeDriver from './pages/BecomeDriver'
 import InstallBanner from './components/InstallBanner'
 
 const Loader = () => (
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="/driver/onboarding" element={<DriverOnboarding />} />
         <Route path="/driver/pending" element={<DriverPending />} />
         <Route path="/faq" element={<FAQ />} />
+        <Route path="/become-driver" element={<RequireAuth><BecomeDriver /></RequireAuth>} />
 
         {/* Driver dashboard (auth required) */}
         <Route path="/driver" element={<RequireDriverAuth><DriverDashboard /></RequireDriverAuth>} />

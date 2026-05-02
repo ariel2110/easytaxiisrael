@@ -351,3 +351,27 @@ export interface DemoReportData {
   rides: DemoRide[]
   generated_at: string
 }
+
+
+export interface DriverApplicationItem {
+  id: string
+  user_id: string
+  driver_type: string
+  status: 'submitted' | 'sumsub_pending' | 'docs_required' | 'ai_review' | 'pending_admin' | 'approved' | 'rejected'
+  status_label: string
+  next_step: string
+  has_vehicle: boolean
+  vehicle_number: string | null
+  vehicle_make: string | null
+  vehicle_model: string | null
+  vehicle_year: number | null
+  years_driving: number | null
+  motivation: string | null
+  rejection_reason: string | null
+  admin_notes: string | null
+  phone: string
+  full_name: string | null
+  user_role: string | null
+  auth_status: string | null
+  created_at: string
+}

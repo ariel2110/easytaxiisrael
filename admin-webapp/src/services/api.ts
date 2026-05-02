@@ -1,4 +1,4 @@
-import type { AdminUser, DriverAdminRead, PlatformStats, AdminRide, AuditLog, AIAgent, AIChatResponse, AIChatHistory, AIKeyUpdateResponse, VehicleCheckResult, SumsubApplicantsResponse, SystemHealth, DailyReport, DemoReportData, Lead, FindLeadsResponse, LeadsListResponse, PendingApprovalItem } from '../types'
+import type { AdminUser, DriverAdminRead, PlatformStats, AdminRide, AuditLog, AIAgent, AIChatResponse, AIChatHistory, AIKeyUpdateResponse, VehicleCheckResult, SumsubApplicantsResponse, SystemHealth, DailyReport, DemoReportData, Lead, FindLeadsResponse, LeadsListResponse, PendingApprovalItem, DriverApplicationItem } from '../types'
 
 const BASE = '/api'
 const ADMIN_KEY = 'e78a16747d74f1074e2c590d0cc4a074db43b4bc90ac19e2'
@@ -52,6 +52,20 @@ export const api = {
     list: () => req<{ total: number; items: PendingApprovalItem[] }>('GET', '/admin/pending-approvals'),
     approve: (id: string) => req<AdminUser>('PATCH', `/admin/users/${id}/approve`),
     reject:  (id: string) => req<AdminUser>('PATCH', `/admin/users/${id}/deactivate`),
+  },
+  driverApplications: {
+    list: (filterStatus?: string) =>
+      req<{ total: number; items: DriverApplicationItem[] }>(
+        'GET', `/admin/driver-applications${filterStatus ? `?filter_status=${filterStatus}` : ''}`
+      ),
+    approve: (id: string, notes?: string) =>
+      req<{ status: string; application: DriverApplicationItem }>(
+        'PATCH', `/admin/driver-applications/${id}/approve`, { notes }
+      ),
+    reject: (id: string, reason: string, notes?: string) =>
+      req<{ status: string; application: DriverApplicationItem }>(
+        'PATCH', `/admin/driver-applications/${id}/reject`, { reason, notes }
+      ),
   },
   drivers: {
     list: (skip = 0, limit = 100) =>

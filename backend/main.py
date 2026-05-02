@@ -21,6 +21,7 @@ from api.vehicle import router as vehicle_router
 from api.ratings import router as ratings_router
 from api.kyc import router as kyc_router
 from api.sumsub import router as sumsub_router
+from api.driver_application import router as driver_application_router
 from api.rides import router as rides_router
 from api.tracking import router as tracking_router
 from api.whatsapp import router as whatsapp_router
@@ -115,3 +116,4 @@ app.include_router(rideshare_router)
 app.include_router(vehicle_router)
 app.include_router(kyc_router)
 app.include_router(sumsub_router)
+app.include_router(driver_application_router)
